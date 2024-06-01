@@ -1,0 +1,11 @@
+[package]
+name = "spt_mod_sync"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.4", features = ["derive"] }
+dircpy = "0.3.16"
+git2 = "0.18.3"
+indicatif = "0.17.8"
