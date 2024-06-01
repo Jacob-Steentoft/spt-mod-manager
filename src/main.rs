@@ -35,7 +35,7 @@ enum UpdateTarget {
 }
 
 fn main() -> Result<()> {
-	if !Path::new("./Aki.Server.exe").exists() {
+	if !Path::new(&format!("./{SERVER_FILE_NAME}")).exists() {
 		eprintln!("ERROR: Could not find {SERVER_FILE_NAME} in the current folder");
 		return Ok(());
 	}
