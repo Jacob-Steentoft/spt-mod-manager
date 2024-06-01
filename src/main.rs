@@ -1,13 +1,16 @@
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
+
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use dircpy::CopyBuilder;
 use git2::build::CheckoutBuilder;
 use git2::Repository;
 use indicatif::ProgressBar;
-use std::fs;
-use std::path::Path;
-use std::process::Command;
-use std::time::Duration;
+
+mod mod_manager;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -119,3 +122,5 @@ fn fast_forward(repo: Repository, branch: &str) -> Result<()> {
 		Err(anyhow!("Fast-forward only!"))
 	}
 }
+
+
