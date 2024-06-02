@@ -6,28 +6,44 @@ use std::io::Write;
 use anyhow::{Context, Result};
 use octocrab::Octocrab;
 use reqwest::{Client, ClientBuilder, Url};
+use crate::sp_tarkov::{SptClient, SptLink};
 
 struct ModManager {
 	octo: Octocrab,
-	rewest: Client,
+	reqwest: Client,
 	mod_cache_folder: String,
 	current_mods: Vec<DirEntry>,
+	spt_client: SptClient,
 }
 
-enum ModEntry {
+enum ModKind {
 	GitHub {
 		owner: String,
 		repo: String,
 		pattern: String,
 	},
 	SpTarkov {
-		url: Url,
+		url: String,
 	},
 }
 
-struct DownloadReference {
-	name: String,
-	url: Url,
+pub trait ModVersion {
+	fn get_version(&self) -> String;
+	async fn download(&self, download_dir: File) -> Result<()>;
+}
+
+pub trait ModLink {
+	fn parse(url: &str) -> Result<Self> where Self: Sized;
+}
+
+pub trait ModClient<ME: ModLink, MV: ModVersion>{
+	async fn get_latest_version(&self, link: ME) -> Result<MV>;
+	async fn get_specific_version(&self, link: ME, kind: &str) -> Result<Option<MV>>;
+}
+
+pub struct GitHubDownloadReference {
+	pub name: String,
+	pub url: Url,
 }
 
 impl ModManager {
@@ -43,26 +59,27 @@ impl ModManager {
 
 		Ok(Self {
 			octo: Octocrab::default(),
-			rewest: ClientBuilder::new().build().unwrap(),
+			reqwest: ClientBuilder::new().build().unwrap(),
 			mod_cache_folder: mod_folder.to_string(),
 			current_mods,
+			spt_client: SptClient::new(),
 		})
 	}
 
-	async fn check_newest_release(&self, mod_entry: ModEntry) -> Result<()> {
+	async fn get_newest_release(&self, mod_entry: ModKind) -> Result<()> {
 		let dl_ref = match mod_entry {
-			ModEntry::GitHub {
+			ModKind::GitHub {
 				owner,
 				repo,
 				pattern,
 			} => {
-				self.get_newest_github_release(&owner, &repo, &pattern)
-					.await?
+				self.get_newest_github_release(&owner, &repo, &pattern).await?
 			}
-			ModEntry::SpTarkov { .. } => DownloadReference {
-				url: Url::parse("127.0.0.1").unwrap(),
-				name: "test".to_string(),
-			},
+			ModKind::SpTarkov { url } => {
+				let link = SptLink::parse(&url)?;
+				let x = self.spt_client.get_latest_version(link).await?;
+				x
+			}
 		};
 
 		let string = OsString::from(&dl_ref.name);
@@ -71,7 +88,7 @@ impl ModManager {
 			.iter()
 			.any(|entry| entry.file_name().eq(&string))
 		{
-			let response = self.rewest.get(dl_ref.url).send().await?;
+			let response = self.reqwest.get(dl_ref.url).send().await?;
 			let mut result = File::create(format!("{}/{}", self.mod_cache_folder, dl_ref.name))?;
 			result.write_all(&response.bytes().await?)?;
 		};
@@ -83,7 +100,7 @@ impl ModManager {
 		owner: &str,
 		repo: &str,
 		assert_pattern: &str,
-	) -> Result<DownloadReference> {
+	) -> Result<GitHubDownloadReference> {
 		let release = self.octo.repos(owner, repo).releases().get_latest().await?;
 
 		let asset = release
@@ -92,9 +109,10 @@ impl ModManager {
 			.find(|ass| ass.name.contains(assert_pattern))
 			.with_context(|| format!("Failed to find assert from pattern: {assert_pattern}"))?;
 
-		Ok(DownloadReference {
+		Ok(GitHubDownloadReference {
 			name: asset.name,
 			url: asset.browser_download_url,
 		})
 	}
 }
+

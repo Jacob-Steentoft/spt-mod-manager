@@ -11,6 +11,7 @@ use git2::Repository;
 use indicatif::ProgressBar;
 
 mod mod_manager;
+mod sp_tarkov;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
