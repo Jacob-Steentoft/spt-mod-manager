@@ -1,17 +1,16 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use dircpy::CopyBuilder;
-use git2::build::CheckoutBuilder;
-use git2::Repository;
 use indicatif::ProgressBar;
 
-mod mod_manager;
-mod sp_tarkov;
+use crate::mod_downloader::{ModKind, ModManager, ModVersionDownloader};
+
+mod mod_downloader;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -38,31 +37,50 @@ enum UpdateTarget {
 	Server,
 }
 
-fn main() -> Result<()> {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() -> Result<()> {
 	if !Path::new(&format!("./{SERVER_FILE_NAME}")).exists() {
 		eprintln!("ERROR: Could not find {SERVER_FILE_NAME} in the current folder");
 		return Ok(());
 	}
 	let args = Cli::parse();
 
+	
+
+	let manager = ModManager::new();
+
 	match args.command {
-		Commands::Update { target } => update(target)?,
+		Commands::Update { target } => update(&manager, target).await?,
 	}
 
 	Ok(())
 }
 
-fn update(target: UpdateTarget) -> Result<()> {
+async fn update(manager: &ModManager, target: UpdateTarget) -> Result<()> {
 	if target == UpdateTarget::Server {
 		Command::new("docker").args(["stop", "fika"]).output()?;
 	}
 	const TEMP_PATH: &str = "./tmp";
-
 	fs::create_dir_all(TEMP_PATH)?;
+	
+	let current_mods: Vec<_> = fs::read_dir(TEMP_PATH)?
+		.filter(|entry| {
+			entry
+				.as_ref()
+				.is_ok_and(|entry| entry.file_type().is_ok_and(|ft| ft.is_file()))
+		})
+		.flatten()
+		.collect();
 
-	download_repo(TEMP_PATH)?;
-
-	merge_mods(TEMP_PATH, "./")?;
+	let downloader = check_newest_release(manager,ModKind::SpTarkov { url: "https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/".to_string() }).await?;
+	
+	let string = OsString::from(&downloader.mod_version().file_name);
+	if current_mods
+		.iter()
+		.any(|entry| entry.file_name().eq(&string))
+	{
+		downloader.download(TEMP_PATH).await?;
+	};
 
 	if target == UpdateTarget::Server {
 		Command::new("docker").args(["start", "fika"]).output()?;
@@ -70,58 +88,11 @@ fn update(target: UpdateTarget) -> Result<()> {
 	Ok(())
 }
 
-fn merge_mods(source_dir: &str, target_dir: &str) -> Result<()> {
+async fn check_newest_release(manager: &ModManager, mod_kind: ModKind) -> Result<ModVersionDownloader>{
 	let bar = ProgressBar::new_spinner();
 	bar.enable_steady_tick(Duration::from_millis(100));
-	bar.set_message(format!("Merging mods into: {target_dir}"));
-	copy_dir_all(source_dir, target_dir)?;
-	bar.finish_with_message("Merged mods");
-	Ok(())
+	bar.set_message("Finding newest mod");
+	let downloader = manager.get_newest_release(mod_kind).await?;
+	bar.finish_with_message("Found newest mod");
+	Ok(downloader)
 }
-
-fn download_repo(repo_dir: &str) -> Result<()> {
-	let bar = ProgressBar::new_spinner();
-	bar.enable_steady_tick(Duration::from_millis(100));
-	bar.set_message("Downloading mods");
-
-	match Repository::open(repo_dir) {
-		Ok(repo) => fast_forward(repo, "master")?,
-		Err(_) => {
-			Repository::clone("https://github.com/Jacob-Steentoft/SPT.git", repo_dir)?;
-		}
-	};
-
-	bar.finish_with_message("Downloaded mods");
-	Ok(())
-}
-
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
-	CopyBuilder::new(src, dst)
-		.overwrite_if_newer(true)
-		.overwrite_if_size_differs(true)
-		.with_exclude_filter(".gitignore")
-		.run()?;
-	Ok(())
-}
-
-fn fast_forward(repo: Repository, branch: &str) -> Result<()> {
-	repo.find_remote("origin")?.fetch(&[branch], None, None)?;
-
-	let fetch_head = repo.find_reference("FETCH_HEAD")?;
-	let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
-	let (analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
-	if analysis.is_up_to_date() {
-		Ok(())
-	} else if analysis.is_fast_forward() {
-		let ref_name = format!("refs/heads/{}", branch);
-		let mut reference = repo.find_reference(&ref_name)?;
-		reference.set_target(fetch_commit.id(), "Fast-Forward")?;
-		repo.set_head(&ref_name)?;
-		repo.checkout_head(Some(CheckoutBuilder::default().force()))?;
-		Ok(())
-	} else {
-		Err(anyhow!("Fast-forward only!"))
-	}
-}
-
-

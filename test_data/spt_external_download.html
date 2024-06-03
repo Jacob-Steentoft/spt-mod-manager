@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+
+<head>
+    <title>Forwarding - SPT Mods Workshop</title>
+
+
+    <meta name="referrer" content="no-referrer" />
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="robots" content="noindex"><meta property="og:site_name" content="SPT Mods Workshop">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" type="text/css" href="https://hub.sp-tarkov.com/style/style-2.css?m=1716362299"><link rel="preload" href="https://hub.sp-tarkov.com/font/families/Open%20Sans/OpenSans-Regular.woff2?v=1614334343" as="font" crossorigin><link rel="preload" href="https://hub.sp-tarkov.com/font/fontawesome-webfont.woff2?v=4.7.0" as="font" crossorigin type="font/woff2"><style>
+    .fireRockets > img{
+        display: block;
+        margin: 0 auto;
+        width:24px;
+        height:46px;
+    }
+
+    /*Blendet den liegenbleibenden Schnee auf mobilen Geräten aus, da beim iPhone Probleme bei der Darstellung auftreten können*/
+    @media only screen and (max-width: 800px) {
+        .fireRockets {
+            display:none!important;
+        }
+    }
+</style>
+
+
+    <script>
+        var SID_ARG_2ND	= '';
+        var WCF_PATH = 'https://hub.sp-tarkov.com/';
+        var WSC_API_URL = 'https://hub.sp-tarkov.com/';
+        var SECURITY_TOKEN = 'b6127324f62dbaf500f3d0ef97a92aa677c967693ecaf5535c6f6d09c581d1b5-HrGSONZM1TopnuRYbx0a/g==';
+        var LANGUAGE_ID = 2;
+        var LANGUAGE_USE_INFORMAL_VARIANT = true;
+        var TIME_NOW = 1717427705;
+        var LAST_UPDATE_TIME = 1712082691;
+        var URL_LEGACY_MODE = false;
+        var ENABLE_DEBUG_MODE = false;
+        var ENABLE_PRODUCTION_DEBUG_MODE = false;
+        var ENABLE_DEVELOPER_TOOLS = false;
+        var WSC_API_VERSION = 2019;
+
+        var REACTION_TYPES = {"6":{"title":"Thumbs Up","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/6-thumbsup_svg.svg\"\n\talt=\"Thumbs Up\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"6\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/6-thumbsup_svg.svg","showOrder":1,"reactionTypeID":6,"isAssignable":1},"7":{"title":"Happy","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/7-smile_svg.svg\"\n\talt=\"Happy\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"7\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/7-smile_svg.svg","showOrder":2,"reactionTypeID":7,"isAssignable":1},"11":{"title":"Heart","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/11-heart_svg.svg\"\n\talt=\"Heart\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"11\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/11-heart_svg.svg","showOrder":3,"reactionTypeID":11,"isAssignable":1},"8":{"title":"Thinking","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/8-thinking_svg.svg\"\n\talt=\"Thinking\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"8\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/8-thinking_svg.svg","showOrder":4,"reactionTypeID":8,"isAssignable":1},"9":{"title":"?","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/9-question_svg.svg\"\n\talt=\"?\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"9\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/9-question_svg.svg","showOrder":5,"reactionTypeID":9,"isAssignable":1},"10":{"title":"Crying","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/10-cry_svg.svg\"\n\talt=\"Crying\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"10\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/10-cry_svg.svg","showOrder":6,"reactionTypeID":10,"isAssignable":1},"1":{"title":"Like","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/1-gura_heart.png\"\n\talt=\"Like\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"1\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/1-gura_heart.png","showOrder":7,"reactionTypeID":1,"isAssignable":0},"2":{"title":"Thanks","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/2-gura_wink.gif\"\n\talt=\"Thanks\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"2\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/2-gura_wink.gif","showOrder":8,"reactionTypeID":2,"isAssignable":0},"3":{"title":"Haha","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/3-joy.gif\"\n\talt=\"Haha\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"3\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/3-joy.gif","showOrder":9,"reactionTypeID":3,"isAssignable":0},"4":{"title":"Confused","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/4-kanna_question.png\"\n\talt=\"Confused\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"4\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/4-kanna_question.png","showOrder":10,"reactionTypeID":4,"isAssignable":0},"5":{"title":"Sad","renderedIcon":"<img\n\tsrc=\"https:\/\/hub.sp-tarkov.com\/images\/reaction\/5-eresh_crying.png\"\n\talt=\"Sad\"\n\tclass=\"reactionType\"\n\tdata-reaction-type-id=\"5\"\n>","iconPath":"https:\/\/hub.sp-tarkov.com\/images\/reaction\/5-eresh_crying.png","showOrder":11,"reactionTypeID":5,"isAssignable":0}};
+
+    </script>
+
+    <script src="https://hub.sp-tarkov.com/js/WoltLabSuite.Core.tiny.min.js?v=1712082691"></script>
+    <script>
+        requirejs.config({
+            baseUrl: 'https://hub.sp-tarkov.com/js',
+            urlArgs: 't=1712082691'
+
+        });
+
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                window.location.reload();
+            }
+        });
+
+    </script>
+    <script src="https://hub.sp-tarkov.com/js/WoltLabSuite.Filebase.tiny.min.js?v=1712082691"></script>
+    <script src="https://hub.sp-tarkov.com/js/WoltLabSuite.Forum.tiny.min.js?v=1712082691"></script>
+    <script src="https://hub.sp-tarkov.com/js/WoltLabSuite.Gallery.tiny.min.js?v=1712082691"></script>
+    <noscript>
+        <style>
+            .jsOnly {
+                display: none !important;
+            }
+
+            .noJsOnly {
+                display: block !important;
+            }
+        </style>
+    </noscript>
+
+    <script type="application/ld+json">
+        {
+            "@context": "http://schema.org",
+            "@type": "WebSite",
+            "url": "https:\/\/hub.sp-tarkov.com\/",
+            "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https:\/\/hub.sp-tarkov.com\/search\/?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+            }
+        }
+    </script>
+
+    <!-- Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://hub.sp-tarkov.com/images/favicon/default.apple-touch-icon.png">
+    <link rel="manifest" href="https://hub.sp-tarkov.com/images/favicon/default.manifest.json">
+    <link rel="shortcut icon" href="https://hub.sp-tarkov.com/images/favicon/default.favicon.ico">
+    <meta name="msapplication-config" content="https://hub.sp-tarkov.com/images/favicon/default.browserconfig.xml">
+    <meta name="theme-color" content="#323947">
+
+    <!-- Global site tag (gtag.js) - Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-135366714-3"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'UA-135366714-3');
+    </script>
+</head>
+<body id="tpl_wcf_scDereferer"
+      itemscope itemtype="http://schema.org/WebPage"
+      data-template="scDereferer" data-application="wcf">
+<div class="externalLinkMessage container">
+
+    <div>
+        <h1>You are leaving SPT Mods Workshop.<br/></h1>
+
+        <p>Please note, that you are going to a website that is not operated by us. We are not responsible for it's content nor does our privacy policy apply there.</p>
+        <p>
+            <a href="https://github.com/maxloo2/betterkeys-updated/releases/download/v1.2.3/maxloo2-betterkeys-updated-v1.2.3.zip" onclick="window.location.replace('https:\/\/github.com\/maxloo2\/betterkeys-updated\/releases\/download\/v1.2.3\/maxloo2-betterkeys-updated-v1.2.3.zip');return false;" class="button buttonPrimary noDereferer" referrerpolicy="no-referrer">Go to link</a>
+
+        </p>
+    </div>
+
+</div>
+</body>
+</html>
