@@ -5,23 +5,40 @@ use reqwest::Url;
 use scraper::selector::CssLocalName;
 use scraper::{CaseSensitivity, Element, Html, Selector};
 
-pub struct ModVersion {
+pub(super) struct SptMod {
+	pub title: String,
+	pub versions: Vec<SptModVersion>,
+}
+
+pub(super) struct SptModVersion {
 	pub version: String,
 	pub download_url: Url,
-	pub time: DateTime<Utc>,
+	pub uploaded_at: DateTime<Utc>,
 }
 
 static TIME_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("time").unwrap());
 static LINK_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("a").unwrap());
-static VERSIONS_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div").unwrap());
+static DIV_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("div").unwrap());
+static H1_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("h1").unwrap());
 static LIST_SELECTOR: Lazy<Selector> = Lazy::new(|| Selector::parse("li").unwrap());
 static VERSIONS_CSS: Lazy<CssLocalName> = Lazy::new(|| CssLocalName::from("versions"));
+static CONTENT_TITLE_CSS: Lazy<CssLocalName> = Lazy::new(|| CssLocalName::from("contentTitle"));
 static URL_CSS: Lazy<CssLocalName> = Lazy::new(|| CssLocalName::from("externalURL"));
 
-pub fn spt_parse_for_versions(document: &str) -> Result<Vec<ModVersion>> {
+pub fn spt_parse_mod_page(document: &str) -> Result<SptMod> {
 	let html = Html::parse_document(document);
+	let title = html
+		.select(&H1_SELECTOR)
+		.find(|e| e.has_class(&CONTENT_TITLE_CSS, CaseSensitivity::CaseSensitive))
+		.and_then(|e| {
+			e.child_elements()
+				.find(|n| n.attr("itemprop").is_some_and(|x| x == "name"))
+		})
+		.and_then(|e| e.text().next())
+		.context("Found no title")?;
+
 	let versions = html
-		.select(&VERSIONS_SELECTOR)
+		.select(&DIV_SELECTOR)
 		.find(|e| e.has_id(&VERSIONS_CSS, CaseSensitivity::CaseSensitive))
 		.context("Found no versions")?;
 
@@ -53,13 +70,16 @@ pub fn spt_parse_for_versions(document: &str) -> Result<Vec<ModVersion>> {
 			.context("Found no version name")?
 			.to_string();
 
-		download_links.push(ModVersion {
+		download_links.push(SptModVersion {
 			version,
 			download_url: Url::parse(external_download_link)?,
-			time,
+			uploaded_at: time,
 		})
 	}
-	Ok(download_links)
+	Ok(SptMod {
+		title: title.to_string(),
+		versions: download_links
+	})
 }
 
 pub fn spt_parse_download(document: &str) -> Result<Url> {
@@ -97,10 +117,11 @@ mod tests {
 			.unwrap()
 			.read_to_string(&mut buffer)
 			.unwrap();
-		let vec = spt_parse_for_versions(&buffer).unwrap();
-		for element in &vec {
+		let vec = spt_parse_mod_page(&buffer).unwrap();
+		assert_eq!(vec.title, "Better Keys Updated".to_string());
+		for element in &vec.versions {
 			assert!(element.version.starts_with("Version "))
 		}
-		assert_eq!(vec.len(), 7);
+		assert_eq!(vec.versions.len(), 7);
 	}
 }

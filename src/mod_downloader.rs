@@ -1,6 +1,4 @@
-use std::fs::File;
-use std::io::Write;
-use std::sync::Arc;
+use std::io::{Seek, Write};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -15,7 +13,7 @@ mod spt_client;
 
 pub struct ModManager {
 	spt_client: SptClient,
-	reqwest: Arc<Client>,
+	reqwest: Client,
 	github: GithubClient,
 }
 
@@ -31,6 +29,7 @@ pub enum ModKind {
 }
 
 pub struct ModVersion {
+	pub title: String,
 	pub file_name: String,
 	pub download_url: Url,
 	pub uploaded_at: DateTime<Utc>,
@@ -39,18 +38,18 @@ pub struct ModVersion {
 
 pub struct ModVersionDownloader {
 	mod_version: ModVersion,
-	reqwest: Arc<Client>,
+	reqwest: Client,
 }
 
 impl ModVersionDownloader {
-	pub async fn download(&self, download_dir: &str) -> Result<()> {
+	pub async fn download<W: Write + Seek>(&self, download_to: &mut W) -> Result<()> {
 		let response = self
 			.reqwest
 			.get(self.mod_version.download_url.clone())
 			.send()
 			.await?;
-		let mut result = File::create(format!("{}/{}", download_dir, self.mod_version.file_name))?;
-		result.write_all(&response.bytes().await?)?;
+
+		download_to.write_all(&response.bytes().await?)?;
 		Ok(())
 	}
 	
@@ -61,12 +60,11 @@ impl ModVersionDownloader {
 
 impl ModManager {
 	pub fn new() -> Self {
-		let client = Arc::new(
+		let client = 
 			ClientBuilder::new()
 				.user_agent("spt_mod_manager_rs")
 				.build()
-				.unwrap(),
-		);
+				.unwrap();
 		Self {
 			reqwest: client.clone(),
 			spt_client: SptClient::new(client),

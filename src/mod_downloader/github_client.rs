@@ -18,6 +18,7 @@ impl GithubClient {
 		repo: &str,
 		assert_pattern: &str,
 	) -> anyhow::Result<ModVersion> {
+		let mod_title = self.octo.repos(owner, repo).get().await?.name;
 		let release = self.octo.repos(owner, repo).releases().get_latest().await?;
 
 		let asset = release
@@ -27,6 +28,7 @@ impl GithubClient {
 			.with_context(|| format!("Failed to find assert from pattern: {assert_pattern}"))?;
 
 		Ok(ModVersion {
+			title: mod_title,
 			file_name: asset.name,
 			download_url: asset.browser_download_url,
 			version: release.name.context("Found no name")?,
