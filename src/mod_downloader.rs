@@ -1,17 +1,20 @@
-use std::io::{Seek, Write};
-
+use std::cmp::Ordering;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
+use versions::Versioning;
 
 use crate::mod_downloader::github_client::GithubClient;
 use crate::mod_downloader::spt_client::{SptClient, SptLink};
+use crate::{ModName, ModVersion};
+use crate::mod_downloader::mod_version_downloader::ModVersionDownloader;
 
 mod github_client;
 mod html_parsers;
 mod spt_client;
+mod mod_version_downloader;
 
-pub struct ModManager {
+pub struct ModDownloader {
 	spt_client: SptClient,
 	reqwest: Client,
 	github: GithubClient,
@@ -28,37 +31,35 @@ pub enum ModKind {
 	},
 }
 
-pub struct ModVersion {
+#[derive(Debug)]
+pub struct ModDownloadVersion {
 	pub title: String,
 	pub file_name: String,
 	pub download_url: Url,
 	pub uploaded_at: DateTime<Utc>,
-	pub version: String,
+	pub version: Versioning,
 }
 
-pub struct ModVersionDownloader {
-	mod_version: ModVersion,
-	reqwest: Client,
-}
-
-impl ModVersionDownloader {
-	pub async fn download<W: Write + Seek>(&self, download_to: &mut W) -> Result<()> {
-		let response = self
-			.reqwest
-			.get(self.mod_version.download_url.clone())
-			.send()
-			.await?;
-
-		download_to.write_all(&response.bytes().await?)?;
-		Ok(())
+impl ModName for ModDownloadVersion {
+	fn get_name(&self) -> &str {
+		self.title.as_str()
 	}
-	
-	pub fn mod_version(&self) -> &ModVersion{
-		&self.mod_version
+
+	fn is_same_name<Name: ModName>(&self, rhs: &Name) -> bool {
+		self.title == rhs.get_name()
 	}
 }
 
-impl ModManager {
+impl ModVersion for ModDownloadVersion {
+	fn get_version(&self) -> &Versioning {
+		&self.version
+	}
+	fn get_order<Version: ModVersion>(&self, rhs: &Version) -> Ordering {
+		self.version.cmp(rhs.get_version())
+	}
+}
+
+impl ModDownloader {
 	pub fn new() -> Self {
 		let client = 
 			ClientBuilder::new()
@@ -89,9 +90,6 @@ impl ModManager {
 			}
 		};
 
-		Ok(ModVersionDownloader {
-			mod_version,
-			reqwest: self.reqwest.clone()
-		})
+		Ok(ModVersionDownloader::new(mod_version, &self.reqwest))
 	}
 }

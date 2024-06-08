@@ -1,12 +1,13 @@
 use anyhow::{anyhow, Context, Result};
 use reqwest::{Client, Url};
+use versions::Versioning;
 use winnow::ascii::digit1;
 use winnow::combinator::repeat;
 use winnow::prelude::*;
 use winnow::token::{take, take_until};
 
 use crate::mod_downloader::html_parsers::SptMod;
-use crate::mod_downloader::{html_parsers, ModVersion};
+use crate::mod_downloader::{html_parsers, ModDownloadVersion};
 
 pub struct SptClient {
 	client: Client,
@@ -17,20 +18,20 @@ impl SptClient {
 		Self { client }
 	}
 
-	pub async fn get_latest_version(&self, spt_link: SptLink) -> Result<ModVersion> {
+	pub async fn get_latest_version(&self, spt_link: SptLink) -> Result<ModDownloadVersion> {
 		let spt_mod = self.get_all_versions(spt_link).await?;
 		let mod_version = spt_mod
 			.versions
 			.into_iter()
-			.min_by(|x, x1| x.uploaded_at.cmp(&x1.uploaded_at))
+			.max_by(|x, x1| x.version.cmp(&x1.version))
 			.context("Found no mods")?;
 
 		let download_url = self.get_mod_dl_link(mod_version.download_url).await?;
 
 		let file_name = get_mod_filename(download_url.as_str())
 			.map_err(|_| anyhow!("Failed to parse file name to download"))?;
-
-		Ok(ModVersion {
+		
+		Ok(ModDownloadVersion {
 			title: spt_mod.title,
 			download_url,
 			version: mod_version.version,
@@ -42,8 +43,8 @@ impl SptClient {
 	pub async fn get_version(
 		&self,
 		spt_link: SptLink,
-		version: &str,
-	) -> Result<Option<ModVersion>> {
+		version: Versioning,
+	) -> Result<Option<ModDownloadVersion>> {
 		let spt_mod = self.get_all_versions(spt_link).await?;
 		let mod_version = spt_mod
 			.versions
@@ -57,7 +58,7 @@ impl SptClient {
 		let file_name = get_mod_filename(mod_version.download_url.as_str())
 			.map_err(|_| anyhow!("Failed to parse file name to download"))?;
 
-		Ok(Some(ModVersion {
+		Ok(Some(ModDownloadVersion {
 			title: spt_mod.title,
 			version: mod_version.version,
 			uploaded_at: mod_version.uploaded_at,

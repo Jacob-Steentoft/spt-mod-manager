@@ -2,16 +2,22 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use reqwest::Url;
-use scraper::selector::CssLocalName;
 use scraper::{CaseSensitivity, Element, Html, Selector};
+use scraper::selector::CssLocalName;
+use versions::Versioning;
+use winnow::prelude::*;
+use winnow::PResult;
+use winnow::stream::AsChar;
+use winnow::token::take_till;
 
 pub(super) struct SptMod {
 	pub title: String,
 	pub versions: Vec<SptModVersion>,
 }
 
+#[derive(Debug)]
 pub(super) struct SptModVersion {
-	pub version: String,
+	pub version: Versioning,
 	pub download_url: Url,
 	pub uploaded_at: DateTime<Utc>,
 }
@@ -64,12 +70,12 @@ pub fn spt_parse_mod_page(document: &str) -> Result<SptMod> {
 			.attr("href")
 			.context("Found no download link for version")?;
 
-		let version = link
+		let version_str = link
 			.text()
 			.next()
-			.context("Found no version name")?
-			.to_string();
+			.context("Found no version name")?;
 
+		let version = parse_version(version_str).ok().flatten().context("Failed to parse version")?;
 		download_links.push(SptModVersion {
 			version,
 			download_url: Url::parse(external_download_link)?,
@@ -80,6 +86,11 @@ pub fn spt_parse_mod_page(document: &str) -> Result<SptMod> {
 		title: title.to_string(),
 		versions: download_links
 	})
+}
+
+pub fn parse_version(version: &str) -> PResult<Option<Versioning>>{
+	let (remainder, _) = take_till(0.., AsChar::is_dec_digit).parse_peek(version)?;
+	Ok(Versioning::new(remainder))
 }
 
 pub fn spt_parse_download(document: &str) -> Result<Url> {
@@ -95,9 +106,10 @@ pub fn spt_parse_download(document: &str) -> Result<Url> {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
 	use std::fs::File;
 	use std::io::Read;
+
+	use super::*;
 
 	#[test]
 	fn test_parse_download() {
@@ -119,8 +131,9 @@ mod tests {
 			.unwrap();
 		let vec = spt_parse_mod_page(&buffer).unwrap();
 		assert_eq!(vec.title, "Better Keys Updated".to_string());
+		println!("{:?}", vec.versions);
 		for element in &vec.versions {
-			assert!(element.version.starts_with("Version "))
+			assert!(element.version.is_ideal())
 		}
 		assert_eq!(vec.versions.len(), 7);
 	}
