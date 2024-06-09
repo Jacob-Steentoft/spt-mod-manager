@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
 use versions::Versioning;
 
-use crate::mod_downloader::github_client::GithubClient;
+use crate::mod_downloader::github_client::{GithubClient, GitHubMod};
 use crate::mod_downloader::spt_client::{SptClient, SptLink};
 use crate::{ModName, ModVersion};
 use crate::mod_downloader::mod_version_downloader::ModVersionDownloader;
@@ -21,14 +21,21 @@ pub struct ModDownloader {
 }
 
 pub enum ModKind {
-	GitHub {
-		owner: String,
-		repo: String,
-		pattern: String,
-	},
-	SpTarkov {
-		url: String,
-	},
+	GitHub(GitHubMod),
+	SpTarkov(SptLink),
+}
+
+impl ModKind {
+	pub fn parse(url: &str, gh_pattern: Option<String>) -> Option<Self>{
+		if let Ok(spt_link) = SptLink::parse(url){
+			return Some(Self::SpTarkov(spt_link));
+		}
+		
+		if let Some(gh_mod) = gh_pattern.and_then(|t| GitHubMod::parse(url, t).ok()){
+			return Some(Self::GitHub(gh_mod));
+		}
+		None
+	}
 }
 
 #[derive(Debug)]
@@ -75,17 +82,12 @@ impl ModDownloader {
 
 	pub async fn get_newest_release(&self, mod_entry: ModKind) -> Result<ModVersionDownloader> {
 		let mod_version = match mod_entry {
-			ModKind::GitHub {
-				owner,
-				repo,
-				pattern,
-			} => {
+			ModKind::GitHub(gh_mod) => {
 				self.github
-					.get_newest_github_release(&owner, &repo, &pattern)
+					.get_newest_github_release(gh_mod)
 					.await?
 			}
-			ModKind::SpTarkov { url } => {
-				let link = SptLink::parse(&url)?;
+			ModKind::SpTarkov(link)=> {
 				self.spt_client.get_latest_version(link).await?
 			}
 		};

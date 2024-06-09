@@ -12,11 +12,13 @@ use futures_core::Stream;
 use indicatif::ProgressBar;
 use versions::Versioning;
 
+use crate::configuration_manager::ConfigManager;
 use crate::file_manager::{FileManager, ModCacheStatus};
 use crate::mod_downloader::{ModDownloader, ModKind};
 
 mod file_manager;
 mod mod_downloader;
+mod configuration_manager;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -75,9 +77,10 @@ async fn main() -> Result<()> {
 
 	let downloader = ModDownloader::new();
 	let mut file_man = FileManager::build(TEMP_PATH)?;
+	let cfg_man = ConfigManager::new();
 
 	match args.command {
-		Commands::Update { target } => update(&downloader, &mut file_man, target).await?,
+		Commands::Update { target } => update(&downloader, &mut file_man, cfg_man, target).await?,
 	}
 
 	Ok(())
@@ -85,31 +88,38 @@ async fn main() -> Result<()> {
 
 async fn update(
 	mod_downloader: &ModDownloader,
-	file_manager: &mut FileManager,
+	file_man: &mut FileManager,
+	cfg_man: ConfigManager,
 	target: UpdateTarget,
 ) -> Result<()> {
 	if target == UpdateTarget::Server {
 		Command::new("docker").args(["stop", "fika"]).output()?;
 	}
 
-	let version_downloader = get_newest_release(
-		mod_downloader,
-		ModKind::SpTarkov {
-			url: "https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/".to_string(),
-		},
-	)
-	.await?;
-
-	match file_manager.get_mod_status(&version_downloader) {
-		ModCacheStatus::SameVersion => {
-			println!("Current mod is same version")
-		}
-		ModCacheStatus::NewerVersion => {
-			println!("Current mod is newer version")
-		}
-		ModCacheStatus::NotCached => file_manager.cache_mod(&version_downloader).await?,
-		ModCacheStatus::OlderVersion => file_manager.cache_mod(&version_downloader).await?,
+	let mod_cfg_file = "./spt_mods.json";
+	let Some(mod_cfgs)  = cfg_man.get_mods_from_path(mod_cfg_file)? else {
+		println!("Found no mods at {}", mod_cfg_file);
+		return Ok(())
 	};
+
+	for mod_cfg in mod_cfgs {
+		let Some(mod_kind) = ModKind::parse(&mod_cfg.url, mod_cfg.github_pattern) else {
+			continue
+		};
+		
+		let version_downloader = get_newest_release(mod_downloader, mod_kind).await?;
+
+		match file_man.get_mod_status(&version_downloader) {
+			ModCacheStatus::SameVersion => {
+				println!("Current mod is same version")
+			}
+			ModCacheStatus::NewerVersion => {
+				println!("Current mod is newer version")
+			}
+			ModCacheStatus::NotCached => file_man.cache_mod(&version_downloader).await?,
+			ModCacheStatus::OlderVersion => file_man.cache_mod(&version_downloader).await?,
+		};
+	}
 
 	if target == UpdateTarget::Server {
 		Command::new("docker").args(["start", "fika"]).output()?;

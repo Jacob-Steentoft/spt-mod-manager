@@ -2,12 +2,12 @@ use anyhow::{anyhow, Context, Result};
 use reqwest::{Client, Url};
 use versions::Versioning;
 use winnow::ascii::digit1;
-use winnow::combinator::repeat;
+use winnow::combinator::{eof, opt, repeat};
 use winnow::prelude::*;
 use winnow::token::{take, take_until};
 
-use crate::mod_downloader::html_parsers::SptMod;
 use crate::mod_downloader::{html_parsers, ModDownloadVersion};
+use crate::mod_downloader::html_parsers::SptMod;
 
 pub struct SptClient {
 	client: Client,
@@ -99,9 +99,14 @@ pub struct SptLink {
 }
 
 impl SptLink {
-	pub fn parse(url: &str) -> Result<Self> {
-		validate_url(url).map_err(|err| anyhow!("Failed to parse SP Tarkov url: {}", err))?;
-		let url = Url::parse(url)?;
+	pub fn parse(url_str: &str) -> Result<Self> {
+		validate_url(url_str).map_err(|err| anyhow!("Failed to parse SP Tarkov url: {}", err))?;
+		let url = if !url_str.ends_with("/") {
+			Url::parse(&format!("{}/", url_str))?
+		}
+		else {
+			Url::parse(url_str)?
+		};
 		Ok(Self { url })
 	}
 
@@ -112,11 +117,13 @@ impl SptLink {
 }
 
 fn validate_url(input: &str) -> PResult<()> {
-	let (parsed, _) = "https://hub.sp-tarkov.com/files/file/".parse_peek(input)?;
-	let (parsed, numbers) = take_until(1.., "-").parse_peek(parsed)?;
+	let (remainder, _) = "https://hub.sp-tarkov.com/files/file/".parse_peek(input)?;
+	let (remainder, numbers) = take_until(1.., "-").parse_peek(remainder)?;
 	digit1.and_then(take(numbers.len())).parse_peek(numbers)?;
-	let (_parsed, _test) = take_until(0.., "/").parse_peek(parsed)?;
-	"/".parse_peek(_parsed)?;
+	let (remainder, taken) = opt((take_until(1.., "/"), take(1usize))).parse_peek(remainder)?;
+	if taken.is_some() {
+		eof.parse_peek(remainder)?;
+	}
 	Ok(())
 }
 
@@ -144,6 +151,24 @@ mod tests {
 				.unwrap();
 		let result = client.get_all_versions(spt_mod).await.unwrap();
 		assert!(!result.versions.is_empty());
+	}
+
+	#[test]
+	fn url_parses_correctly_with_slash() {
+		let result = validate_url("https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn url_parses_correctly_without_slash() {
+		let result = validate_url("https://hub.sp-tarkov.com/files/file/1963-better-keys-updated");
+		assert!(result.is_ok());
+	}
+
+	#[test]
+	fn url_parses_incorrectly_with_ext() {
+		let result = validate_url("https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/#versions");
+		assert!(result.is_err());
 	}
 
 	#[test]
