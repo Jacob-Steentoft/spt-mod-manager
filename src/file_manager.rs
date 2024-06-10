@@ -86,14 +86,14 @@ impl FileManager {
 		};
 	}
 
-	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<()> {
+	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<PathBuf> {
 		let mod_path = self.ensure_mod_folder(downloader)?;
 
 		let mod_file_name = to_file_name(downloader);
 		let mod_file_path = mod_path.join(Path::new(&mod_file_name));
 		let manifest_path = ModManifest::create_manifest_path(mod_path, &mod_file_name)?;
 
-		let mut writer = BufWriter::new(File::create(mod_file_path)?);
+		let mut writer = BufWriter::new(File::create(&mod_file_path)?);
 		let stream = downloader.download().await?;
 		pin!(stream);
 		while let Some(item) = stream.next().await {
@@ -107,7 +107,7 @@ impl FileManager {
 
 		self.cached_mods = calculate_cache(&self.cache_dir)?;
 
-		Ok(())
+		Ok(mod_file_path)
 	}
 
 	#[allow(dead_code)]

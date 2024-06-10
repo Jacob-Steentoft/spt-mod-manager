@@ -15,13 +15,14 @@ use versions::Versioning;
 use crate::configuration_manager::ConfigManager;
 use crate::file_manager::{FileManager, ModCacheStatus};
 use crate::mod_downloader::{ModDownloader, ModKind};
+use crate::mod_installer::ModInstaller;
 
+mod configuration_manager;
 mod file_manager;
 mod mod_downloader;
-mod configuration_manager;
+mod mod_installer;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
-
 
 pub trait ModName {
 	fn get_name(&self) -> &str;
@@ -78,9 +79,12 @@ async fn main() -> Result<()> {
 	let downloader = ModDownloader::new();
 	let mut file_man = FileManager::build(TEMP_PATH)?;
 	let cfg_man = ConfigManager::new();
+	let installer = ModInstaller::new();
 
 	match args.command {
-		Commands::Update { target } => update(&downloader, &mut file_man, cfg_man, target).await?,
+		Commands::Update { target } => {
+			update(&downloader, &mut file_man, &cfg_man, &installer, target).await?
+		}
 	}
 
 	Ok(())
@@ -89,7 +93,8 @@ async fn main() -> Result<()> {
 async fn update(
 	mod_downloader: &ModDownloader,
 	file_man: &mut FileManager,
-	cfg_man: ConfigManager,
+	cfg_man: &ConfigManager,
+	installer: &ModInstaller,
 	target: UpdateTarget,
 ) -> Result<()> {
 	if target == UpdateTarget::Server {
@@ -97,28 +102,34 @@ async fn update(
 	}
 
 	let mod_cfg_file = "./spt_mods.json";
-	let Some(mod_cfgs)  = cfg_man.get_mods_from_path(mod_cfg_file)? else {
+	let Some(mod_cfgs) = cfg_man.get_mods_from_path(mod_cfg_file)? else {
 		println!("Found no mods at {}", mod_cfg_file);
-		return Ok(())
+		return Ok(());
 	};
 
 	for mod_cfg in mod_cfgs {
 		let Some(mod_kind) = ModKind::parse(&mod_cfg.url, mod_cfg.github_pattern) else {
-			continue
+			continue;
 		};
-		
+
 		let version_downloader = get_newest_release(mod_downloader, mod_kind).await?;
 
-		match file_man.get_mod_status(&version_downloader) {
+		let Some(cached_mod) = (match file_man.get_mod_status(&version_downloader) {
 			ModCacheStatus::SameVersion => {
-				println!("Current mod is same version")
+				println!("Current mod is same version");
+				None
 			}
 			ModCacheStatus::NewerVersion => {
-				println!("Current mod is newer version")
+				println!("Current mod is newer version");
+				None
 			}
-			ModCacheStatus::NotCached => file_man.cache_mod(&version_downloader).await?,
-			ModCacheStatus::OlderVersion => file_man.cache_mod(&version_downloader).await?,
+			ModCacheStatus::NotCached => Some(file_man.cache_mod(&version_downloader).await?),
+			ModCacheStatus::OlderVersion => Some(file_man.cache_mod(&version_downloader).await?),
+		}) else {
+			continue;
 		};
+
+		installer.install_for_client(cached_mod)?;
 	}
 
 	if target == UpdateTarget::Server {
