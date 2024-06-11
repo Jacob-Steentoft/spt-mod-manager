@@ -14,15 +14,15 @@ use winnow::PResult;
 use winnow::token::take_until;
 
 use crate::{ModName, ModVersion, ModVersionDownload};
-use crate::file_manager::cached_mod::CachedMod;
-use crate::file_manager::cached_mod_version::CachedModVersion;
-use crate::file_manager::mod_manifest::ModManifest;
+use crate::cache_mod_access::cached_mod::CachedMod;
+use crate::cache_mod_access::cached_mod_version::CachedModVersion;
+use crate::cache_mod_access::mod_manifest::ModManifest;
 
 mod cached_mod_version;
 mod cached_mod;
 mod mod_manifest;
 
-pub struct FileManager {
+pub struct CacheModAccess {
 	cache_dir: PathBuf,
 	cached_mods: Vec<CachedMod>,
 }
@@ -50,7 +50,7 @@ pub enum ModCacheStatus {
 	OlderVersion,
 }
 
-impl FileManager {
+impl CacheModAccess {
 	pub fn build(cache_path: &str) -> Result<Self> {
 		let cache_dir = PathBuf::from(cache_path);
 		if !cache_dir.is_dir() {

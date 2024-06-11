@@ -4,8 +4,8 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use versions::Versioning;
-use crate::file_manager::separate_file_and_ext;
-use crate::mod_downloader::ModDownloadVersion;
+use crate::cache_mod_access::separate_file_and_ext;
+use crate::remote_mod_access::ModDownloadVersion;
 use crate::{ModName, ModVersion, ModVersionDownload};
 
 #[derive(Serialize, Deserialize)]

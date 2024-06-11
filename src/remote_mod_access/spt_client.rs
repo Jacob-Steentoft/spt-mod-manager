@@ -6,8 +6,8 @@ use winnow::combinator::{eof, opt, repeat};
 use winnow::prelude::*;
 use winnow::token::{take, take_until};
 
-use crate::mod_downloader::{html_parsers, ModDownloadVersion};
-use crate::mod_downloader::html_parsers::SptMod;
+use crate::remote_mod_access::{html_parsers, ModDownloadVersion};
+use crate::remote_mod_access::html_parsers::SptMod;
 
 pub struct SptClient {
 	client: Client,

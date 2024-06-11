@@ -12,11 +12,11 @@ pub struct ModConfiguration{
 	pub github_pattern: Option<String>
 }
 
-pub struct ConfigManager{
+pub struct ConfigurationAccess {
 	
 }
 
-impl ConfigManager {
+impl ConfigurationAccess {
 	pub fn new() -> Self{
 		Self{}
 	}

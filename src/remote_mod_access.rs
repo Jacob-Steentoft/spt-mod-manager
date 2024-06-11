@@ -4,17 +4,17 @@ use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
 use versions::Versioning;
 
-use crate::mod_downloader::github_client::{GithubClient, GitHubMod};
-use crate::mod_downloader::spt_client::{SptClient, SptLink};
+use crate::remote_mod_access::github_client::{GithubClient, GitHubMod};
+use crate::remote_mod_access::spt_client::{SptClient, SptLink};
 use crate::{ModName, ModVersion};
-use crate::mod_downloader::mod_version_downloader::ModVersionDownloader;
+use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
 
 mod github_client;
 mod html_parsers;
 mod spt_client;
 mod mod_version_downloader;
 
-pub struct ModDownloader {
+pub struct RemoteModAccess {
 	spt_client: SptClient,
 	reqwest: Client,
 	github: GithubClient,
@@ -66,7 +66,7 @@ impl ModVersion for ModDownloadVersion {
 	}
 }
 
-impl ModDownloader {
+impl RemoteModAccess {
 	pub fn new() -> Self {
 		let client = 
 			ClientBuilder::new()

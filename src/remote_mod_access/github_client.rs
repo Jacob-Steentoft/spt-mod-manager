@@ -6,7 +6,7 @@ use winnow::{Parser, PResult};
 use winnow::combinator::opt;
 use winnow::token::{take, take_until};
 
-use crate::mod_downloader::ModDownloadVersion;
+use crate::remote_mod_access::ModDownloadVersion;
 
 pub struct GitHubMod {
 	owner: String,

@@ -12,15 +12,15 @@ use futures_core::Stream;
 use indicatif::ProgressBar;
 use versions::Versioning;
 
-use crate::configuration_manager::ConfigManager;
-use crate::file_manager::{FileManager, ModCacheStatus};
-use crate::mod_downloader::{ModDownloader, ModKind};
-use crate::mod_installer::ModInstaller;
+use crate::configuration_access::ConfigurationAccess;
+use crate::cache_mod_access::{CacheModAccess, ModCacheStatus};
+use crate::remote_mod_access::{RemoteModAccess, ModKind};
+use crate::spt_access::SptAccess;
 
-mod configuration_manager;
-mod file_manager;
-mod mod_downloader;
-mod mod_installer;
+mod configuration_access;
+mod cache_mod_access;
+mod remote_mod_access;
+mod spt_access;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -76,10 +76,10 @@ async fn main() -> Result<()> {
 	const TEMP_PATH: &str = "./sptmm_tmp";
 	fs::create_dir_all(TEMP_PATH)?;
 
-	let downloader = ModDownloader::new();
-	let mut file_man = FileManager::build(TEMP_PATH)?;
-	let cfg_man = ConfigManager::new();
-	let installer = ModInstaller::new();
+	let downloader = RemoteModAccess::new();
+	let mut file_man = CacheModAccess::build(TEMP_PATH)?;
+	let cfg_man = ConfigurationAccess::new();
+	let installer = SptAccess::new("./");
 
 	match args.command {
 		Commands::Update { target } => {
@@ -91,10 +91,10 @@ async fn main() -> Result<()> {
 }
 
 async fn update(
-	mod_downloader: &ModDownloader,
-	file_man: &mut FileManager,
-	cfg_man: &ConfigManager,
-	installer: &ModInstaller,
+	mod_downloader: &RemoteModAccess,
+	file_man: &mut CacheModAccess,
+	cfg_man: &ConfigurationAccess,
+	installer: &SptAccess,
 	target: UpdateTarget,
 ) -> Result<()> {
 	if target == UpdateTarget::Server {
@@ -139,7 +139,7 @@ async fn update(
 }
 
 async fn get_newest_release(
-	manager: &ModDownloader,
+	manager: &RemoteModAccess,
 	mod_kind: ModKind,
 ) -> Result<impl ModVersionDownload> {
 	let bar = ProgressBar::new_spinner();

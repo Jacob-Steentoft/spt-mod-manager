@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use futures_core::Stream;
 use reqwest::Client;
 use versions::Versioning;
-use crate::mod_downloader::ModDownloadVersion;
+use crate::remote_mod_access::ModDownloadVersion;
 use crate::{ModName, ModVersion, ModVersionDownload};
 
 #[derive(Debug)]
