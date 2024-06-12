@@ -145,10 +145,12 @@ mod tests {
 		let provider = MockTimeProvider::new();
 		let _result = fs::remove_dir_all("./user");
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
-		SptAccess::new("./", provider).restore_from(buf).unwrap();
+		let path = "./test_output/restore";
+		fs::create_dir_all(path).unwrap();
+		SptAccess::new(path, provider).restore_from(buf).unwrap();
 		
-		assert!(Path::new("./user/mods/maxloo2-betterkeys-updated/package.json").is_file());
-		fs::remove_dir_all("./user").unwrap()
+		assert!(Path::new(&format!("{path}/user/mods/maxloo2-betterkeys-updated/package.json")).is_file());
+		fs::remove_dir_all(path).unwrap()
 	}
 	
 	#[test]
@@ -162,8 +164,10 @@ mod tests {
 	fn integration_test_backup() {
 		let mut provider = MockTimeProvider::new();
 		provider.expect_get_current_time().returning(DateTime::<Utc>::default);
-		let path = PathBuf::from("./test_output");
-		SptAccess::new("./", provider).backup_to(path).unwrap();
+		let path = PathBuf::from("./test_output/backup");
+		fs::create_dir_all(&path).unwrap();
+		SptAccess::new("./", provider).backup_to(&path).unwrap();
+		fs::remove_dir_all(path).unwrap()
 	}
 
 	#[test]
