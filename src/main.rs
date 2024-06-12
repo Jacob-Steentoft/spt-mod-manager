@@ -9,7 +9,6 @@ use indicatif::ProgressBar;
 use crate::cache_mod_access::{CacheModAccess, ModCacheStatus};
 use crate::configuration_access::ConfigurationAccess;
 use crate::remote_mod_access::{ModKind, RemoteModAccess};
-use crate::shared_traits::ModVersionDownload;
 use crate::spt_access::SptAccess;
 use crate::time_access::Time;
 
@@ -21,10 +20,11 @@ mod spt_access;
 mod time_access;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
+const TEMP_PATH: &str = "./sptmm_tmp";
 
 #[derive(Debug, Parser)]
-#[command(name = "spt mod installer")]
-#[command(about = "A mod installer managed by ControlFreak", long_about = None)]
+#[command(name = "spt mod manager")]
+#[command(about = "A mod manager created by ControlFreak for SPTarkov", long_about = None)]
 struct Cli {
 	#[command(subcommand)]
 	command: Commands,
@@ -36,15 +36,12 @@ enum Commands {
 	Update {
 		#[arg(required = true)]
 		target: UpdateTarget,
+		configuration_path: Option<String>,
 	},
 	#[command(arg_required_else_help = true)]
-	Backup{
-		backup_to: String
-	},
+	Backup { backup_to: String },
 	#[command(arg_required_else_help = true)]
-	Restore{
-		restore_from: String
-	},
+	Restore { restore_from: String },
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
@@ -61,7 +58,6 @@ async fn main() -> Result<()> {
 	}
 	let args = Cli::parse();
 
-	const TEMP_PATH: &str = "./sptmm_tmp";
 	fs::create_dir_all(TEMP_PATH)?;
 
 	let downloader = RemoteModAccess::new();
@@ -70,55 +66,83 @@ async fn main() -> Result<()> {
 	let spt_access = SptAccess::new("./", Time::new());
 
 	match args.command {
-		Commands::Update { target } => {
-			update(&downloader, &mut file_man, &cfg_man, &spt_access, target).await?
+		Commands::Update {
+			target,
+			configuration_path,
+		} => {
+			update(
+				&downloader,
+				&mut file_man,
+				&cfg_man,
+				&spt_access,
+				target,
+				configuration_path,
+			)
+			.await?
 		}
-		Commands::Backup{backup_to} => backup(&spt_access, &backup_to)?,
-		Commands::Restore {restore_from} => restore(&spt_access, &restore_from)?,
+		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
+		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
 	}
 
 	Ok(())
 }
 
 async fn update(
-	mod_downloader: &RemoteModAccess,
+	remote_mod_access: &RemoteModAccess,
 	file_man: &mut CacheModAccess,
 	cfg_man: &ConfigurationAccess,
 	installer: &SptAccess<Time>,
 	target: UpdateTarget,
+	configuration_path: Option<String>,
 ) -> Result<()> {
-	let mod_cfg_file = "./spt_mods.json";
-	let Some(mod_cfgs) = cfg_man.get_mods_from_path(mod_cfg_file)? else {
-		println!("Found no mods at {}", mod_cfg_file);
+	let mod_cfg_file = configuration_path.unwrap_or("./spt_mods.json".to_string());
+	let Some(mod_cfg) = cfg_man.get_mods_from_path(&mod_cfg_file)? else {
+		println!("Found no mod config at: {mod_cfg_file}");
 		return Ok(());
 	};
+	println!("Found mod config at: {mod_cfg_file}");
 
-	for mod_cfg in mod_cfgs {
-		let Some(mod_kind) = ModKind::parse(&mod_cfg.url, mod_cfg.github_pattern) else {
+	for mod_cfg in mod_cfg {
+		let mod_url = mod_cfg.url;
+		let Some(mod_kind) = ModKind::parse(&mod_url, mod_cfg.github_pattern) else {
 			continue;
 		};
+		let bar = ProgressBar::new_spinner();
+		bar.enable_steady_tick(Duration::from_millis(100));
 
-		let version_downloader = get_newest_release(mod_downloader, mod_kind).await?;
-
-		let Some(cached_mod) = (match file_man.get_mod_status(&version_downloader) {
-			ModCacheStatus::SameVersion => {
-				println!("Current mod is same version");
-				None
+		let mod_downloader = match mod_cfg.version {
+			None => {
+				bar.set_message(format!("Finding newest version online for: {mod_url}"));
+				let version_downloader = remote_mod_access.get_newest_release(mod_kind).await?;
+				match file_man.get_mod_status(&version_downloader) {
+					ModCacheStatus::SameVersion => None,
+					ModCacheStatus::NewerVersion => None,
+					ModCacheStatus::NotCached => Some(version_downloader),
+					ModCacheStatus::OlderVersion => Some(version_downloader),
+				}
 			}
-			ModCacheStatus::NewerVersion => {
-				println!("Current mod is newer version");
-				None
-			}
-			ModCacheStatus::NotCached => Some(file_man.cache_mod(&version_downloader).await?),
-			ModCacheStatus::OlderVersion => Some(file_man.cache_mod(&version_downloader).await?),
-		}) else {
-			continue;
+			// TODO: impl target specific version
+			Some(_) => None,
 		};
 
+		let mod_to_install = match mod_downloader {
+			None => {
+				// TODO: Verify locally installed mod
+				bar.finish_with_message(format!("Newest version already installed for: {mod_url}"));
+				continue;
+			}
+			Some(version_downloader) => {
+				bar.set_message(format!("Downloading the newest version for: {mod_url}"));
+				file_man.cache_mod(&version_downloader).await? 
+			},
+		};
+
+		bar.set_message(format!("Installing the newest version for: {mod_url}"));
 		match target {
-			UpdateTarget::Client => installer.install_for_client(cached_mod)?,
-			UpdateTarget::Server => {}
+			UpdateTarget::Client => installer.install_for_client(mod_to_install)?,
+			UpdateTarget::Server => {} // TODO: Create install for server fn
 		}
+		bar.finish_with_message(format!("The newest version has been installed for: {mod_url}"));
 	}
 	Ok(())
 }
@@ -128,27 +152,15 @@ fn restore(spt_access: &SptAccess<Time>, restore_from: &str) -> Result<()> {
 	bar.enable_steady_tick(Duration::from_millis(100));
 	bar.set_message("Restoring mods and configurations");
 	spt_access.restore_from(restore_from)?;
-	bar.finish_with_message( format!("Backed up mods to: {restore_from}"));
+	bar.finish_with_message(format!("Backed up mods to: {restore_from}"));
 	Ok(())
 }
 
-fn backup(spt_access: &SptAccess<Time>, backup_to_path: &str) -> Result<()>{
+fn backup(spt_access: &SptAccess<Time>, backup_to_path: &str) -> Result<()> {
 	let bar = ProgressBar::new_spinner();
 	bar.enable_steady_tick(Duration::from_millis(100));
 	bar.set_message("Backing up mods and configurations");
 	spt_access.backup_to(backup_to_path)?;
-	bar.finish_with_message( format!("Restored your files from: {backup_to_path}"));
+	bar.finish_with_message(format!("Restored your files from: {backup_to_path}"));
 	Ok(())
-}
-
-async fn get_newest_release(
-	manager: &RemoteModAccess,
-	mod_kind: ModKind,
-) -> Result<impl ModVersionDownload> {
-	let bar = ProgressBar::new_spinner();
-	bar.enable_steady_tick(Duration::from_millis(100));
-	bar.set_message("Finding newest mod");
-	let downloader = manager.get_newest_release(mod_kind).await?;
-	bar.finish_with_message("Found newest mod");
-	Ok(downloader)
 }

@@ -4,7 +4,6 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use chrono::Utc;
 use walkdir::WalkDir;
 use winnow::{dispatch, PResult};
 use winnow::combinator::{empty, opt, separated};
@@ -137,7 +136,7 @@ fn file_parser(file_name: &mut &str) -> PResult<FileType> {
 
 #[cfg(test)]
 mod tests {
-	use chrono::DateTime;
+	use chrono::{DateTime, Utc};
 	use crate::shared_traits::MockTimeProvider;
 	use super::*;
 
