@@ -6,8 +6,8 @@ use versions::Versioning;
 
 use crate::remote_mod_access::github_client::{GithubClient, GitHubMod};
 use crate::remote_mod_access::spt_client::{SptClient, SptLink};
-use crate::{ModName, ModVersion};
 use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
+use crate::shared_traits::{ModName, ModVersion};
 
 mod github_client;
 mod html_parsers;

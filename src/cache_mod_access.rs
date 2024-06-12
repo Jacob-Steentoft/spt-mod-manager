@@ -13,10 +13,10 @@ use winnow::prelude::*;
 use winnow::PResult;
 use winnow::token::take_until;
 
-use crate::{ModName, ModVersion, ModVersionDownload};
 use crate::cache_mod_access::cached_mod::CachedMod;
 use crate::cache_mod_access::cached_mod_version::CachedModVersion;
 use crate::cache_mod_access::mod_manifest::ModManifest;
+use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
 mod cached_mod_version;
 mod cached_mod;

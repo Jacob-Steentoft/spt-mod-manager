@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use versions::Versioning;
 use crate::cache_mod_access::separate_file_and_ext;
 use crate::remote_mod_access::ModDownloadVersion;
-use crate::{ModName, ModVersion, ModVersionDownload};
+use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
 #[derive(Serialize, Deserialize)]
 pub struct ModManifest {

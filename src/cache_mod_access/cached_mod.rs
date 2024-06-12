@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use crate::cache_mod_access::cached_mod_version::CachedModVersion;
-use crate::ModName;
+use crate::shared_traits::ModName;
 
 pub struct CachedMod {
 	path: PathBuf,

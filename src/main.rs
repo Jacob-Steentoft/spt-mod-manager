@@ -1,46 +1,26 @@
-use std::cmp::Ordering;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use std::time::Duration;
 
 use anyhow::Result;
-use bytes::Bytes;
-use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
-use futures_core::Stream;
 use indicatif::ProgressBar;
-use versions::Versioning;
 
-use crate::configuration_access::ConfigurationAccess;
 use crate::cache_mod_access::{CacheModAccess, ModCacheStatus};
-use crate::remote_mod_access::{RemoteModAccess, ModKind};
+use crate::configuration_access::ConfigurationAccess;
+use crate::remote_mod_access::{ModKind, RemoteModAccess};
+use crate::shared_traits::ModVersionDownload;
 use crate::spt_access::SptAccess;
+use crate::time_access::Time;
 
-mod configuration_access;
 mod cache_mod_access;
+mod configuration_access;
 mod remote_mod_access;
+mod shared_traits;
 mod spt_access;
+mod time_access;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
-
-pub trait ModName {
-	fn get_name(&self) -> &str;
-
-	fn is_same_name<Name: ModName>(&self, mod_name: &Name) -> bool;
-}
-
-pub trait ModVersion: ModName {
-	fn get_version(&self) -> &Versioning;
-	fn get_order<Version: ModVersion>(&self, mod_version: &Version) -> Ordering;
-}
-
-pub trait ModVersionDownload: ModVersion + Unpin {
-	#[allow(async_fn_in_trait)]
-	async fn download(&self) -> Result<impl Stream<Item = reqwest::Result<Bytes>>>;
-	fn get_file_name(&self) -> &str;
-	fn get_upload_date(&self) -> DateTime<Utc>;
-}
 
 #[derive(Debug, Parser)]
 #[command(name = "spt mod installer")]
@@ -56,6 +36,14 @@ enum Commands {
 	Update {
 		#[arg(required = true)]
 		target: UpdateTarget,
+	},
+	#[command(arg_required_else_help = true)]
+	Backup{
+		backup_to: String
+	},
+	#[command(arg_required_else_help = true)]
+	Restore{
+		restore_from: String
 	},
 }
 
@@ -79,12 +67,14 @@ async fn main() -> Result<()> {
 	let downloader = RemoteModAccess::new();
 	let mut file_man = CacheModAccess::build(TEMP_PATH)?;
 	let cfg_man = ConfigurationAccess::new();
-	let installer = SptAccess::new("./");
+	let spt_access = SptAccess::new("./", Time::new());
 
 	match args.command {
 		Commands::Update { target } => {
-			update(&downloader, &mut file_man, &cfg_man, &installer, target).await?
+			update(&downloader, &mut file_man, &cfg_man, &spt_access, target).await?
 		}
+		Commands::Backup{backup_to} => backup(&spt_access, &backup_to)?,
+		Commands::Restore {restore_from} => restore(&spt_access, &restore_from)?,
 	}
 
 	Ok(())
@@ -94,13 +84,9 @@ async fn update(
 	mod_downloader: &RemoteModAccess,
 	file_man: &mut CacheModAccess,
 	cfg_man: &ConfigurationAccess,
-	installer: &SptAccess,
+	installer: &SptAccess<Time>,
 	target: UpdateTarget,
 ) -> Result<()> {
-	if target == UpdateTarget::Server {
-		Command::new("docker").args(["stop", "fika"]).output()?;
-	}
-
 	let mod_cfg_file = "./spt_mods.json";
 	let Some(mod_cfgs) = cfg_man.get_mods_from_path(mod_cfg_file)? else {
 		println!("Found no mods at {}", mod_cfg_file);
@@ -129,12 +115,29 @@ async fn update(
 			continue;
 		};
 
-		installer.install_for_client(cached_mod)?;
+		match target {
+			UpdateTarget::Client => installer.install_for_client(cached_mod)?,
+			UpdateTarget::Server => {}
+		}
 	}
+	Ok(())
+}
 
-	if target == UpdateTarget::Server {
-		Command::new("docker").args(["start", "fika"]).output()?;
-	}
+fn restore(spt_access: &SptAccess<Time>, restore_from: &str) -> Result<()> {
+	let bar = ProgressBar::new_spinner();
+	bar.enable_steady_tick(Duration::from_millis(100));
+	bar.set_message("Restoring mods and configurations");
+	spt_access.restore_from(restore_from)?;
+	bar.finish_with_message( format!("Backed up mods to: {restore_from}"));
+	Ok(())
+}
+
+fn backup(spt_access: &SptAccess<Time>, backup_to_path: &str) -> Result<()>{
+	let bar = ProgressBar::new_spinner();
+	bar.enable_steady_tick(Duration::from_millis(100));
+	bar.set_message("Backing up mods and configurations");
+	spt_access.backup_to(backup_to_path)?;
+	bar.finish_with_message( format!("Restored your files from: {backup_to_path}"));
 	Ok(())
 }
 

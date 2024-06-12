@@ -2,7 +2,8 @@ use std::cmp::Ordering;
 use std::path::PathBuf;
 use versions::Versioning;
 use crate::cache_mod_access::ModManifest;
-use crate::{ModName, ModVersion};
+use crate::shared_traits::{ModName, ModVersion};
+
 
 pub struct CachedModVersion {
 	pub path: PathBuf,

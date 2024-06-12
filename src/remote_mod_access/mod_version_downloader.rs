@@ -5,7 +5,7 @@ use futures_core::Stream;
 use reqwest::Client;
 use versions::Versioning;
 use crate::remote_mod_access::ModDownloadVersion;
-use crate::{ModName, ModVersion, ModVersionDownload};
+use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
 #[derive(Debug)]
 pub struct ModVersionDownloader {
