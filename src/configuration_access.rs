@@ -2,13 +2,13 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
-use versions::Version;
+use versions::{Versioning};
 use anyhow::Result;
 
 #[derive(Deserialize, Serialize)]
 pub struct ModConfiguration{
 	pub url: String,
-	pub version: Option<Version>,
+	pub version: Option<Versioning>,
 	pub github_pattern: Option<String>
 }
 

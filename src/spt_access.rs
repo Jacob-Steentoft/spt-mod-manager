@@ -3,15 +3,15 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+use crate::shared_traits::TimeProvider;
 use anyhow::{anyhow, Result};
 use walkdir::WalkDir;
-use winnow::{dispatch, PResult};
 use winnow::combinator::{empty, opt, separated};
 use winnow::prelude::*;
 use winnow::token::take_until;
-use zip::{ZipArchive, ZipWriter};
+use winnow::{dispatch, PResult};
 use zip::write::SimpleFileOptions;
-use crate::shared_traits::TimeProvider;
+use zip::{ZipArchive, ZipWriter};
 
 pub struct SptAccess<Time: TimeProvider> {
 	server_mods_path: PathBuf,
@@ -27,6 +27,11 @@ enum FileType {
 	Server,
 }
 
+pub enum InstallTarget {
+	Server,
+	Client,
+}
+
 impl<Time: TimeProvider> SptAccess<Time> {
 	pub fn new<P: AsRef<Path>>(root_path: P, time: Time) -> Self {
 		Self {
@@ -36,33 +41,34 @@ impl<Time: TimeProvider> SptAccess<Time> {
 			time,
 		}
 	}
-	pub fn install_for_client<P: AsRef<Path>>(&self, archive_path: P) -> Result<()> {
-		let reader = BufReader::new(File::open(archive_path)?);
+	pub fn install_mod<P: AsRef<Path>>(
+		&self,
+		mod_archive_path: P,
+		target: InstallTarget,
+	) -> Result<()> {
+		let reader = BufReader::new(File::open(mod_archive_path)?);
 		let mut zip = ZipArchive::new(reader)?;
 		let names: Vec<_> = zip.file_names().map(|str| str.to_string()).collect();
 		for name in names {
 			let file_type =
 				file_parser(&mut name.as_str()).map_err(|_| anyhow!("Failed to parse folder"))?;
-			match file_type {
-				FileType::Server | FileType::Client => {
-					let mut zip_file = zip.by_name(&name)?;
-					if zip_file.is_file() {
-						let path = format!("./{name}");
-						if let Some(dir_path) = dir_parser(&path)
-							.map_err(|_| anyhow!("Failed to parse install path"))?
-						{
-							fs::create_dir_all(dir_path)?;
-						}
-
-						let mut buffer = Vec::new();
-						let mut writer = BufWriter::new(File::create(path)?);
-						zip_file.read_to_end(&mut buffer)?;
-						writer.write_all(&buffer)?;
-					}
+			match (&file_type, &target) {
+				(FileType::Client, InstallTarget::Client) => {
+					install_if_file(&mut zip, &name)?;
 				}
-				FileType::Unknown => {}
+				(FileType::Server, _) => {
+					install_if_file(&mut zip, &name)?;
+				}
+				_ => {}
 			};
 		}
+		Ok(())
+	}
+	
+	pub fn install_mod_to_path<P: AsRef<Path>>(&self, mod_archive_path: P, install_path: P) -> Result<()>{
+		let reader = BufReader::new(File::open(mod_archive_path)?);
+		let mut archive = ZipArchive::new(reader)?;
+		archive.extract(install_path)?;
 		Ok(())
 	}
 
@@ -78,13 +84,32 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		zip_writer.finish()?;
 		Ok(())
 	}
-	
+
 	pub fn restore_from<P: AsRef<Path>>(&self, archive_path: P) -> Result<()> {
 		let mut zip_archive = ZipArchive::new(File::open(archive_path)?)?;
-		
+
 		zip_archive.extract(&self.root_path)?;
 		Ok(())
 	}
+}
+
+fn install_if_file(zip: &mut ZipArchive<BufReader<File>>, name: &String) -> Result<()> {
+	let mut zip_file = zip.by_name(&name)?;
+	if !zip_file.is_file() {
+		return Ok(());
+	}
+	let path = format!("./{name}");
+	if let Some(dir_path) =
+		dir_parser(&path).map_err(|_| anyhow!("Failed to parse install path"))?
+	{
+		fs::create_dir_all(dir_path)?;
+	}
+
+	let mut buffer = Vec::new();
+	let mut writer = BufWriter::new(File::create(path)?);
+	zip_file.read_to_end(&mut buffer)?;
+	writer.write_all(&buffer)?;
+	Ok(())
 }
 
 fn backup_folder_content(
@@ -136,9 +161,9 @@ fn file_parser(file_name: &mut &str) -> PResult<FileType> {
 
 #[cfg(test)]
 mod tests {
-	use chrono::{DateTime, Utc};
-	use crate::shared_traits::MockTimeProvider;
 	use super::*;
+	use crate::shared_traits::MockTimeProvider;
+	use chrono::{DateTime, Utc};
 
 	#[test]
 	fn integration_test_restore() {
@@ -148,22 +173,27 @@ mod tests {
 		let path = "./test_output/restore";
 		fs::create_dir_all(path).unwrap();
 		SptAccess::new(path, provider).restore_from(buf).unwrap();
-		
-		assert!(Path::new(&format!("{path}/user/mods/maxloo2-betterkeys-updated/package.json")).is_file());
+
+		assert!(Path::new(&format!(
+			"{path}/user/mods/maxloo2-betterkeys-updated/package.json"
+		))
+		.is_file());
 		fs::remove_dir_all(path).unwrap()
 	}
-	
+
 	#[test]
 	fn integration_test_install() {
 		let provider = MockTimeProvider::new();
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
-		SptAccess::new("./", provider).install_for_client(buf).unwrap();
+		SptAccess::new("./", provider).install_mod(buf, InstallTarget::Client).unwrap();
 	}
 
 	#[test]
 	fn integration_test_backup() {
 		let mut provider = MockTimeProvider::new();
-		provider.expect_get_current_time().returning(DateTime::<Utc>::default);
+		provider
+			.expect_get_current_time()
+			.returning(DateTime::<Utc>::default);
 		let path = PathBuf::from("./test_output/backup");
 		fs::create_dir_all(&path).unwrap();
 		SptAccess::new("./", provider).backup_to(&path).unwrap();

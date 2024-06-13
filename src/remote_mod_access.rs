@@ -94,4 +94,20 @@ impl RemoteModAccess {
 
 		Ok(ModVersionDownloader::new(mod_version, &self.reqwest))
 	}
+	
+	pub async fn get_specific_version(&self, mod_kind: ModKind, version: &Versioning) -> Result<Option<ModVersionDownloader>>{
+		let mod_version = match mod_kind {
+			ModKind::GitHub(gh_mod) => {
+				self.github.get_specific_version(gh_mod, &version).await?
+			}
+			ModKind::SpTarkov(spt_mod) => {
+				self.spt_client.get_version(spt_mod, version).await?
+			}
+		};
+		
+		let Some(mod_version) = mod_version else {
+			return Ok(None)
+		};
+		Ok(Some(ModVersionDownloader::new(mod_version, &self.reqwest)))
+	}
 }

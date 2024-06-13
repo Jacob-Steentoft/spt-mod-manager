@@ -64,7 +64,7 @@ impl CacheModAccess {
 		})
 	}
 
-	pub fn get_mod_status<Version: ModVersion>(&self, mod_version: &Version) -> ModCacheStatus {
+	pub fn get_status<Version: ModVersion>(&self, mod_version: &Version) -> ModCacheStatus {
 		let Some(cached_mod) = self
 			.cached_mods
 			.iter()

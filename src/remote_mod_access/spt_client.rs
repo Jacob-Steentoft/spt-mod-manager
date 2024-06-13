@@ -43,13 +43,13 @@ impl SptClient {
 	pub async fn get_version(
 		&self,
 		spt_link: SptLink,
-		version: Versioning,
+		version: &Versioning,
 	) -> Result<Option<ModDownloadVersion>> {
 		let spt_mod = self.get_all_versions(spt_link).await?;
 		let mod_version = spt_mod
 			.versions
 			.into_iter()
-			.find(|mv| mv.version == version);
+			.find(|mv| &mv.version == version);
 
 		let Some(mod_version) = mod_version else {
 			return Ok(None);

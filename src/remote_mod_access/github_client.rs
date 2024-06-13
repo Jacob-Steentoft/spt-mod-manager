@@ -70,6 +70,46 @@ impl GithubClient {
 			uploaded_at: asset.created_at,
 		})
 	}
+
+	pub async fn get_specific_version(&self, gh_mod: GitHubMod, version: &Versioning) -> Result<Option<ModDownloadVersion>>{
+		let mod_title = self
+			.octo
+			.repos(&gh_mod.owner, &gh_mod.repo)
+			.get()
+			.await?
+			.name;
+
+		let releases = self
+			.octo
+			.repos(&gh_mod.owner, &gh_mod.repo)
+			.releases()
+			.list()
+			.send()
+			.await?;
+		let option = releases.into_iter().find(|r| r.name.as_ref().is_some_and(|str| str.contains(&version.to_string())));
+		let Some(release) = option else {
+			return Ok(None)
+		};
+
+		let asset = release
+			.assets
+			.into_iter()
+			.find(|ass| ass.name.contains(&gh_mod.assert_pattern))
+			.with_context(|| {
+				format!(
+					"Failed to find assert from pattern: {}",
+					&gh_mod.assert_pattern
+				)
+			})?;
+		
+		Ok(Some(ModDownloadVersion {
+			title: mod_title,
+			file_name: asset.name,
+			download_url: asset.browser_download_url,
+			version: version.clone(),
+			uploaded_at: asset.created_at,
+		}))
+	}
 }
 
 fn validate_url(input: &str) -> PResult<(String, String)> {

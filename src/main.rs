@@ -9,7 +9,7 @@ use indicatif::ProgressBar;
 use crate::cache_mod_access::{CacheModAccess, ModCacheStatus};
 use crate::configuration_access::ConfigurationAccess;
 use crate::remote_mod_access::{ModKind, RemoteModAccess};
-use crate::spt_access::SptAccess;
+use crate::spt_access::{InstallTarget, SptAccess};
 use crate::time_access::Time;
 
 mod cache_mod_access;
@@ -89,9 +89,9 @@ async fn main() -> Result<()> {
 
 async fn update(
 	remote_mod_access: &RemoteModAccess,
-	file_man: &mut CacheModAccess,
+	cache_mod_access: &mut CacheModAccess,
 	cfg_man: &ConfigurationAccess,
-	installer: &SptAccess<Time>,
+	spt_access: &SptAccess<Time>,
 	target: UpdateTarget,
 	configuration_path: Option<String>,
 ) -> Result<()> {
@@ -114,15 +114,32 @@ async fn update(
 			None => {
 				bar.set_message(format!("Finding newest version online for: {mod_url}"));
 				let version_downloader = remote_mod_access.get_newest_release(mod_kind).await?;
-				match file_man.get_mod_status(&version_downloader) {
+				match cache_mod_access.get_status(&version_downloader) {
 					ModCacheStatus::SameVersion => None,
 					ModCacheStatus::NewerVersion => None,
-					ModCacheStatus::NotCached => Some(version_downloader),
-					ModCacheStatus::OlderVersion => Some(version_downloader),
+					ModCacheStatus::NotCached | ModCacheStatus::OlderVersion => {
+						Some(version_downloader)
+					}
 				}
 			}
-			// TODO: impl target specific version
-			Some(_) => None,
+			Some(version) => {
+				let option = remote_mod_access
+					.get_specific_version(mod_kind, &version)
+					.await?;
+				let Some(version_downloader) = option else {
+					bar.finish_with_message(format!(
+						"Did not find version: {}, for: {mod_url}",
+						version
+					));
+					continue;
+				};
+				match cache_mod_access.get_status(&version_downloader) {
+					ModCacheStatus::SameVersion => None,
+					ModCacheStatus::NewerVersion
+					| ModCacheStatus::NotCached
+					| ModCacheStatus::OlderVersion => Some(version_downloader),
+				}
+			}
 		};
 
 		let mod_to_install = match mod_downloader {
@@ -133,16 +150,22 @@ async fn update(
 			}
 			Some(version_downloader) => {
 				bar.set_message(format!("Downloading the newest version for: {mod_url}"));
-				file_man.cache_mod(&version_downloader).await? 
-			},
+				cache_mod_access.cache_mod(&version_downloader).await?
+			}
 		};
 
 		bar.set_message(format!("Installing the newest version for: {mod_url}"));
 		match target {
-			UpdateTarget::Client => installer.install_for_client(mod_to_install)?,
-			UpdateTarget::Server => {} // TODO: Create install for server fn
+			UpdateTarget::Client => {
+				spt_access.install_mod(mod_to_install, InstallTarget::Client)?
+			}
+			UpdateTarget::Server => {
+				spt_access.install_mod(mod_to_install, InstallTarget::Server)?
+			}
 		}
-		bar.finish_with_message(format!("The newest version has been installed for: {mod_url}"));
+		bar.finish_with_message(format!(
+			"The newest version has been installed for: {mod_url}"
+		));
 	}
 	Ok(())
 }
