@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
@@ -51,12 +51,12 @@ pub enum ModCacheStatus {
 }
 
 impl CacheModAccess {
-	pub fn build(cache_path: &str) -> Result<Self> {
-		let cache_dir = PathBuf::from(cache_path);
+	pub fn build<S: AsRef<OsStr>>(cache_path: S) -> Result<Self> {
+		let cache_dir = PathBuf::from(&cache_path);
 		if !cache_dir.is_dir() {
 			return Err(anyhow!("The path provided was not a directory"));
 		}
-		let cached_mods = calculate_cache(cache_path)?;
+		let cached_mods = calculate_cache(&cache_dir)?;
 
 		Ok(Self {
 			cache_dir,
@@ -109,11 +109,18 @@ impl CacheModAccess {
 
 		Ok(mod_file_path)
 	}
-
-	#[allow(dead_code)]
-	pub fn remove_cached_mod<MN: ModName>(&mut self, mod_name: &MN) -> Result<()>{
-		let buf = self.get_mod_folder(mod_name)?;
-		fs::remove_dir_all(buf)?;
+	
+	pub fn remove_cache(&mut self) -> Result<()>{
+		for entry in fs::read_dir(&self.cache_dir)? {
+			let path = entry?.path();
+			if path.is_dir() {
+				fs::remove_dir_all(path)?;
+			}
+			else if path.is_file() {
+				fs::remove_file(path)?
+			}
+		}
+		
 		self.cached_mods = calculate_cache(&self.cache_dir)?;
 		Ok(())
 	}

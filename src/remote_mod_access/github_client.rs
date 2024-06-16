@@ -8,20 +8,26 @@ use winnow::token::{take, take_until};
 
 use crate::remote_mod_access::ModDownloadVersion;
 
-pub struct GitHubMod {
+const HOST_NAME: &str = "https://github.com";
+
+pub struct GitHubLink {
 	owner: String,
 	repo: String,
 	assert_pattern: String,
 }
 
-impl GitHubMod {
-	pub fn parse(url: &str, assert_pattern: String) -> Result<Self> {
-		let (owner, repo) = validate_url(url).map_err(|_| anyhow!("Failed to parse"))?;
+impl GitHubLink {
+	pub fn parse<S: AsRef<str>>(url: S, assert_pattern: String) -> Result<Self> {
+		let (owner, repo) = validate_url(url.as_ref()).map_err(|_| anyhow!("Failed to parse"))?;
 		Ok(Self {
 			owner,
 			repo,
 			assert_pattern,
 		})
+	}
+
+	pub fn starts_with_host<S: AsRef<str>>(url: &S) -> bool {
+		url.as_ref().starts_with("https://github.com")
 	}
 }
 
@@ -35,7 +41,7 @@ impl GithubClient {
 			octo: Octocrab::default(),
 		}
 	}
-	pub async fn get_newest_github_release(&self, gh_mod: GitHubMod) -> Result<ModDownloadVersion> {
+	pub async fn get_newest_github_release(&self, gh_mod: GitHubLink) -> Result<ModDownloadVersion> {
 		let mod_title = self
 			.octo
 			.repos(&gh_mod.owner, &gh_mod.repo)
@@ -71,7 +77,7 @@ impl GithubClient {
 		})
 	}
 
-	pub async fn get_specific_version(&self, gh_mod: GitHubMod, version: &Versioning) -> Result<Option<ModDownloadVersion>>{
+	pub async fn get_version(&self, gh_mod: GitHubLink, version: &Versioning) -> Result<Option<ModDownloadVersion>>{
 		let mod_title = self
 			.octo
 			.repos(&gh_mod.owner, &gh_mod.repo)
@@ -101,7 +107,7 @@ impl GithubClient {
 					&gh_mod.assert_pattern
 				)
 			})?;
-		
+
 		Ok(Some(ModDownloadVersion {
 			title: mod_title,
 			file_name: asset.name,

@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use reqwest::{Client, Url};
+use reqwest::{Client};
+use url::Url;
 use versions::Versioning;
 use winnow::ascii::digit1;
 use winnow::combinator::{eof, opt, repeat};
@@ -95,24 +96,29 @@ impl SptClient {
 
 #[derive(Debug, Clone)]
 pub struct SptLink {
-	url: Url,
+	link: Url,
 }
 
 impl SptLink {
-	pub fn parse(url_str: &str) -> Result<Self> {
-		validate_url(url_str).map_err(|err| anyhow!("Failed to parse SP Tarkov url: {}", err))?;
-		let url = if !url_str.ends_with("/") {
-			Url::parse(&format!("{}/", url_str))?
+	pub fn parse<S: AsRef<str>>(url: S) -> Result<Self> {
+		let url = url.as_ref();
+		validate_url(url).map_err(|err| anyhow!("Failed to parse SP Tarkov url: {}", err))?;
+		let link = if !url.ends_with('/') {
+			Url::parse(&format!("{}/", url))?
 		}
 		else {
-			Url::parse(url_str)?
+			Url::parse(url)?
 		};
-		Ok(Self { url })
+		Ok(Self { link })
 	}
 
 	fn get_versions_page(&self) -> Result<Url> {
-		let url = self.url.join("#versions")?;
+		let url = self.link.join("#versions")?;
 		Ok(url)
+	}
+	
+	pub fn starts_with_host<S: AsRef<str>>(url: S) -> bool{
+		url.as_ref().starts_with("https://hub.sp-tarkov.com")
 	}
 }
 

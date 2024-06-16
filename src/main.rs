@@ -42,6 +42,7 @@ enum Commands {
 	Backup { backup_to: String },
 	#[command(arg_required_else_help = true)]
 	Restore { restore_from: String },
+	Cleanup,
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
@@ -60,10 +61,10 @@ async fn main() -> Result<()> {
 
 	fs::create_dir_all(TEMP_PATH)?;
 
-	let downloader = RemoteModAccess::new();
-	let mut file_man = CacheModAccess::build(TEMP_PATH)?;
-	let cfg_man = ConfigurationAccess::new();
-	let spt_access = SptAccess::new("./", Time::new());
+	let remote_access = RemoteModAccess::new();
+	let mut cache_mod_access = CacheModAccess::build(TEMP_PATH)?;
+	let cfg_access = ConfigurationAccess::new();
+	let spt_access = SptAccess::init("./", Time::new())?;
 
 	match args.command {
 		Commands::Update {
@@ -71,9 +72,9 @@ async fn main() -> Result<()> {
 			configuration_path,
 		} => {
 			update(
-				&downloader,
-				&mut file_man,
-				&cfg_man,
+				&remote_access,
+				&mut cache_mod_access,
+				&cfg_access,
 				&spt_access,
 				target,
 				configuration_path,
@@ -82,9 +83,14 @@ async fn main() -> Result<()> {
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
+		Commands::Cleanup => cleanup(&mut cache_mod_access)?,
 	}
 
 	Ok(())
+}
+
+fn cleanup(cache_access: &mut CacheModAccess) -> Result<()> {
+	cache_access.remove_cache()
 }
 
 async fn update(
@@ -104,9 +110,15 @@ async fn update(
 
 	for mod_cfg in mod_cfg {
 		let mod_url = mod_cfg.url;
-		let Some(mod_kind) = ModKind::parse(&mod_url, mod_cfg.github_pattern) else {
-			continue;
+		
+		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern) {
+			Ok(mod_kind) => mod_kind,
+			Err(err) => {
+				println!("Failed to parse mod with: {err}");
+				continue;
+			}
 		};
+		
 		let bar = ProgressBar::new_spinner();
 		bar.enable_steady_tick(Duration::from_millis(100));
 
@@ -133,6 +145,7 @@ async fn update(
 					));
 					continue;
 				};
+				// TODO: Migrate cache to remote
 				match cache_mod_access.get_status(&version_downloader) {
 					ModCacheStatus::SameVersion => None,
 					ModCacheStatus::NewerVersion
@@ -155,14 +168,19 @@ async fn update(
 		};
 
 		bar.set_message(format!("Installing the newest version for: {mod_url}"));
-		match target {
-			UpdateTarget::Client => {
-				spt_access.install_mod(mod_to_install, InstallTarget::Client)?
+		if let Some(install_path) = mod_cfg.install_path {
+			spt_access.install_mod_to_path(mod_to_install, install_path.into())?;
+		} else {
+			match target {
+				UpdateTarget::Client => {
+					spt_access.install_mod(mod_to_install, InstallTarget::Client)?
+				}
+				UpdateTarget::Server => {
+					spt_access.install_mod(mod_to_install, InstallTarget::Server)?
+				}
 			}
-			UpdateTarget::Server => {
-				spt_access.install_mod(mod_to_install, InstallTarget::Server)?
-			}
-		}
+		};
+
 		bar.finish_with_message(format!(
 			"The newest version has been installed for: {mod_url}"
 		));

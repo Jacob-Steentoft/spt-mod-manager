@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
 use versions::Versioning;
 
-use crate::remote_mod_access::github_client::{GithubClient, GitHubMod};
+use crate::remote_mod_access::github_client::{GithubClient, GitHubLink};
 use crate::remote_mod_access::spt_client::{SptClient, SptLink};
 use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
 use crate::shared_traits::{ModName, ModVersion};
@@ -21,20 +21,24 @@ pub struct RemoteModAccess {
 }
 
 pub enum ModKind {
-	GitHub(GitHubMod),
+	GitHub(GitHubLink),
 	SpTarkov(SptLink),
 }
 
 impl ModKind {
-	pub fn parse(url: &str, gh_pattern: Option<String>) -> Option<Self>{
-		if let Ok(spt_link) = SptLink::parse(url){
-			return Some(Self::SpTarkov(spt_link));
+	pub fn parse<S: AsRef<str>>(url: S, gh_pattern: Option<String>) -> Result<Self>{
+		if SptLink::starts_with_host(&url) {
+			return Ok(Self::SpTarkov(SptLink::parse(url)?))
 		}
-		
-		if let Some(gh_mod) = gh_pattern.and_then(|t| GitHubMod::parse(url, t).ok()){
-			return Some(Self::GitHub(gh_mod));
+
+		if GitHubLink::starts_with_host(&url) {
+			let Some(pattern) = gh_pattern else {
+				return Err(anyhow!("No asset pattern was provided for Github"))
+			};
+			
+			return Ok(Self::GitHub(GitHubLink::parse(url, pattern)?))
 		}
-		None
+		Err(anyhow!("Unsupported mod host: {}", url.as_ref()))
 	}
 }
 
@@ -98,7 +102,7 @@ impl RemoteModAccess {
 	pub async fn get_specific_version(&self, mod_kind: ModKind, version: &Versioning) -> Result<Option<ModVersionDownloader>>{
 		let mod_version = match mod_kind {
 			ModKind::GitHub(gh_mod) => {
-				self.github.get_specific_version(gh_mod, &version).await?
+				self.github.get_version(gh_mod, version).await?
 			}
 			ModKind::SpTarkov(spt_mod) => {
 				self.spt_client.get_version(spt_mod, version).await?
