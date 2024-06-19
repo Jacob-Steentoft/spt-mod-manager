@@ -178,7 +178,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 
 	fn write_file_to_tarkov(&self, zip_data: ZipData, ) -> Result<()> {
 		let path = self.root_path.join(zip_data.zip_path);
-		if let Some(dir_path) = dir_parser(&path.to_str().context("Failed to parse install path")?).map_err(|_| anyhow!("Failed to parse install path"))?
+		if let Some(dir_path) = dir_parser(path.to_str().context("Failed to parse install path")?).map_err(|_| anyhow!("Failed to parse install path"))?
 		{
 			fs::create_dir_all(dir_path)?;
 		}
