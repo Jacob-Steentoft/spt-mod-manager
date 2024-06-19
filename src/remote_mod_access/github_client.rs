@@ -8,8 +8,6 @@ use winnow::token::{take, take_until};
 
 use crate::remote_mod_access::ModDownloadVersion;
 
-const HOST_NAME: &str = "https://github.com";
-
 pub struct GitHubLink {
 	owner: String,
 	repo: String,

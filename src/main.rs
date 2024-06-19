@@ -6,13 +6,11 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::ProgressBar;
 
-use crate::cache_mod_access::{CacheModAccess, ModCacheStatus};
 use crate::configuration_access::ConfigurationAccess;
 use crate::remote_mod_access::{ModKind, RemoteModAccess};
 use crate::spt_access::{InstallTarget, SptAccess};
 use crate::time_access::Time;
 
-mod cache_mod_access;
 mod configuration_access;
 mod remote_mod_access;
 mod shared_traits;
@@ -39,9 +37,13 @@ enum Commands {
 		configuration_path: Option<String>,
 	},
 	#[command(arg_required_else_help = true)]
-	Backup { backup_to: String },
+	Backup {
+		backup_to: String,
+	},
 	#[command(arg_required_else_help = true)]
-	Restore { restore_from: String },
+	Restore {
+		restore_from: String,
+	},
 	Cleanup,
 }
 
@@ -61,10 +63,9 @@ async fn main() -> Result<()> {
 
 	fs::create_dir_all(TEMP_PATH)?;
 
-	let remote_access = RemoteModAccess::new();
-	let mut cache_mod_access = CacheModAccess::build(TEMP_PATH)?;
+	let mut remote_access = RemoteModAccess::setup(TEMP_PATH)?;
 	let cfg_access = ConfigurationAccess::new();
-	let spt_access = SptAccess::init("./", Time::new())?;
+	let spt_access = SptAccess::init(TEMP_PATH, Time::new())?;
 
 	match args.command {
 		Commands::Update {
@@ -72,8 +73,7 @@ async fn main() -> Result<()> {
 			configuration_path,
 		} => {
 			update(
-				&remote_access,
-				&mut cache_mod_access,
+				&mut remote_access,
 				&cfg_access,
 				&spt_access,
 				target,
@@ -83,19 +83,18 @@ async fn main() -> Result<()> {
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
-		Commands::Cleanup => cleanup(&mut cache_mod_access)?,
+		Commands::Cleanup => cleanup(&mut remote_access)?,
 	}
 
 	Ok(())
 }
 
-fn cleanup(cache_access: &mut CacheModAccess) -> Result<()> {
+fn cleanup(cache_access: &mut RemoteModAccess) -> Result<()> {
 	cache_access.remove_cache()
 }
 
 async fn update(
-	remote_mod_access: &RemoteModAccess,
-	cache_mod_access: &mut CacheModAccess,
+	remote_mod_access: &mut RemoteModAccess,
 	cfg_man: &ConfigurationAccess,
 	spt_access: &SptAccess<Time>,
 	target: UpdateTarget,
@@ -110,7 +109,7 @@ async fn update(
 
 	for mod_cfg in mod_cfg {
 		let mod_url = mod_cfg.url;
-		
+
 		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern) {
 			Ok(mod_kind) => mod_kind,
 			Err(err) => {
@@ -118,72 +117,49 @@ async fn update(
 				continue;
 			}
 		};
-		
+
 		let bar = ProgressBar::new_spinner();
 		bar.enable_steady_tick(Duration::from_millis(100));
 
-		let mod_downloader = match mod_cfg.version {
+		let cached_mod = match mod_cfg.version {
 			None => {
 				bar.set_message(format!("Finding newest version online for: {mod_url}"));
-				let version_downloader = remote_mod_access.get_newest_release(mod_kind).await?;
-				match cache_mod_access.get_status(&version_downloader) {
-					ModCacheStatus::SameVersion => None,
-					ModCacheStatus::NewerVersion => None,
-					ModCacheStatus::NotCached | ModCacheStatus::OlderVersion => {
-						Some(version_downloader)
-					}
-				}
+				remote_mod_access.get_newest_release(mod_kind).await?
 			}
 			Some(version) => {
+				bar.set_message(format!("Finding version '{version}' online for: {mod_url}"));
 				let option = remote_mod_access
 					.get_specific_version(mod_kind, &version)
 					.await?;
-				let Some(version_downloader) = option else {
+				let Some(cached_mod) = option else {
 					bar.finish_with_message(format!(
-						"Did not find version: {}, for: {mod_url}",
-						version
+						"Did not find version: {version}, for: {mod_url}"
 					));
 					continue;
 				};
-				// TODO: Migrate cache to remote
-				match cache_mod_access.get_status(&version_downloader) {
-					ModCacheStatus::SameVersion => None,
-					ModCacheStatus::NewerVersion
-					| ModCacheStatus::NotCached
-					| ModCacheStatus::OlderVersion => Some(version_downloader),
-				}
-			}
-		};
-
-		let mod_to_install = match mod_downloader {
-			None => {
-				// TODO: Verify locally installed mod
-				bar.finish_with_message(format!("Newest version already installed for: {mod_url}"));
-				continue;
-			}
-			Some(version_downloader) => {
-				bar.set_message(format!("Downloading the newest version for: {mod_url}"));
-				cache_mod_access.cache_mod(&version_downloader).await?
+				cached_mod
 			}
 		};
 
 		bar.set_message(format!("Installing the newest version for: {mod_url}"));
 		if let Some(install_path) = mod_cfg.install_path {
-			spt_access.install_mod_to_path(mod_to_install, install_path.into())?;
+			spt_access.install_mod_to_path(&cached_mod.path, install_path)?;
 		} else {
-			match target {
-				UpdateTarget::Client => {
-					spt_access.install_mod(mod_to_install, InstallTarget::Client)?
-				}
-				UpdateTarget::Server => {
-					spt_access.install_mod(mod_to_install, InstallTarget::Server)?
-				}
+			let install_target = match target {
+				UpdateTarget::Client => InstallTarget::Client,
+				UpdateTarget::Server => InstallTarget::Server,
+			};
+			if spt_access.is_same_installed_version(&cached_mod.path, cached_mod, install_target)? {
+				bar.finish_with_message(format!(
+					"Newest version has already been installed for: {mod_url}"
+				));
+				continue
 			}
+			spt_access.install_mod(&cached_mod.path, cached_mod, install_target)?;
+			bar.finish_with_message(format!(
+				"The newest version has been installed for: {mod_url}"
+			));
 		};
-
-		bar.finish_with_message(format!(
-			"The newest version has been installed for: {mod_url}"
-		));
 	}
 	Ok(())
 }

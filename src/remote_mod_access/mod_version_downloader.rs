@@ -39,9 +39,6 @@ impl ModVersionDownloader {
 			reqwest: reqwest.clone()
 		}
 	}
-	pub fn mod_version(&self) -> &ModDownloadVersion {
-		&self.mod_version
-	}
 }
 
 impl ModName for ModVersionDownloader {

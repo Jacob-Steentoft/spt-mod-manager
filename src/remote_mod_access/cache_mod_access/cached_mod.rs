@@ -1,23 +1,25 @@
-use std::path::PathBuf;
-use crate::cache_mod_access::cached_mod_version::CachedModVersion;
-use crate::shared_traits::ModName;
+use versions::Versioning;
+use crate::remote_mod_access::cache_mod_access::cached_mod_version::CachedModVersion;
+use crate::shared_traits::{ModName, ModVersion};
 
 pub struct CachedMod {
-	path: PathBuf,
 	name: String,
 	versions: Vec<CachedModVersion>,
 }
 
 impl CachedMod {
-	pub(super) fn new(path: PathBuf, name: String, versions: Vec<CachedModVersion>,) -> Self{
+	pub(crate) fn new(name: String, versions: Vec<CachedModVersion>,) -> Self{
 		Self{
-			path,
 			name,
 			versions,
 		}
 	}
 	pub fn get_newest(&self) -> Option<&CachedModVersion> {
 		self.versions.iter().max()
+	}
+	
+	pub fn get_version(&self, version: &Versioning) -> Option<&CachedModVersion> {
+		self.versions.iter().find(|x| x.get_version() == version)
 	}
 }
 

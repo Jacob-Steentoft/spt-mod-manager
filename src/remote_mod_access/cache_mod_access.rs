@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
@@ -8,14 +8,15 @@ use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
 use tokio::pin;
+use versions::Versioning;
 use winnow::combinator::separated;
 use winnow::prelude::*;
 use winnow::PResult;
 use winnow::token::take_until;
 
-use crate::cache_mod_access::cached_mod::CachedMod;
-use crate::cache_mod_access::cached_mod_version::CachedModVersion;
-use crate::cache_mod_access::mod_manifest::ModManifest;
+use crate::remote_mod_access::cache_mod_access::cached_mod::CachedMod;
+pub use crate::remote_mod_access::cache_mod_access::cached_mod_version::CachedModVersion;
+use crate::remote_mod_access::cache_mod_access::mod_manifest::ModManifest;
 use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
 mod cached_mod_version;
@@ -52,12 +53,9 @@ pub enum ModCacheStatus {
 
 impl CacheModAccess {
 	pub fn build<S: AsRef<OsStr>>(cache_path: S) -> Result<Self> {
-		let cache_dir = PathBuf::from(&cache_path);
-		if !cache_dir.is_dir() {
-			return Err(anyhow!("The path provided was not a directory"));
-		}
+		let cache_dir = PathBuf::from(&cache_path).join("remote_cache");
+		fs::create_dir_all(&cache_dir)?;
 		let cached_mods = calculate_cache(&cache_dir)?;
-
 		Ok(Self {
 			cache_dir,
 			cached_mods,
@@ -85,8 +83,14 @@ impl CacheModAccess {
 			Ordering::Greater => ModCacheStatus::OlderVersion,
 		};
 	}
+	
+	pub fn get_cached_mod(&self, version: &Versioning) -> Option<&CachedModVersion>{
+		self.cached_mods
+			.iter()
+			.find_map(|x| x.get_version(version))
+	}
 
-	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<PathBuf> {
+	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<&CachedModVersion> {
 		let mod_path = self.ensure_mod_folder(downloader)?;
 
 		let mod_file_name = to_file_name(downloader);
@@ -107,7 +111,12 @@ impl CacheModAccess {
 
 		self.cached_mods = calculate_cache(&self.cache_dir)?;
 
-		Ok(mod_file_path)
+		let version = self.cached_mods
+			.iter()
+			.find_map(|x| x.get_version(downloader.get_version()))
+			.context("Failed to find cached version")?;
+
+		Ok(version)
 	}
 	
 	pub fn remove_cache(&mut self) -> Result<()>{
@@ -126,17 +135,11 @@ impl CacheModAccess {
 	}
 
 	fn ensure_mod_folder<MN: ModName>(&self, mod_name: &MN) -> Result<PathBuf> {
-		let mod_folder_name = to_folder_name(mod_name);
+		let mod_folder_name = mod_name.to_file_name();
 		let mod_path = self.cache_dir.join(mod_folder_name);
 		if !mod_path.is_dir() {
 			fs::create_dir(&mod_path)?;
 		}
-		Ok(mod_path)
-	}
-
-	fn get_mod_folder<MN: ModName>(&self, mod_version: &MN) -> Result<PathBuf> {
-		let mod_folder_name = to_folder_name(mod_version);
-		let mod_path = self.cache_dir.join(mod_folder_name);
 		Ok(mod_path)
 	}
 }
@@ -159,7 +162,7 @@ fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>> {
 			.first()
 			.map(|cmv| cmv.manifest.get_name().to_string())
 			.context("Found no mod name")?;
-		cached_mods.push(CachedMod::new(path, name, versions));
+		cached_mods.push(CachedMod::new(name, versions));
 	}
 	Ok(cached_mods)
 }
@@ -218,27 +221,8 @@ fn get_all_files(folder_path: &PathBuf) -> Result<Vec<CacheFile>> {
 	Ok(vec)
 }
 
-fn to_folder_name<MN: ModName>(mod_version: &MN) -> OsString {
-	mod_version
-		.get_name()
-		.chars()
-		.map(space_mapper)
-		.collect::<String>()
-		.into()
-}
-
 fn to_file_name<Download: ModVersionDownload>(mod_version: &Download) -> String {
-	let string = create_mod_file_prefix(mod_version);
-	format!("{string}_{}", mod_version.get_file_name())
-}
-
-fn create_mod_file_prefix<MV: ModVersion>(mod_version: &MV) -> String {
-	mod_version
-		.get_version()
-		.to_string()
-		.chars()
-		.map(space_mapper)
-		.collect::<String>()
+	format!("{}_{}",mod_version.to_file_version(), mod_version.get_file_name())
 }
 
 fn separate_file_and_ext(file_name: &str) -> PResult<(String, Option<String>)> {
@@ -249,14 +233,6 @@ fn separate_file_and_ext(file_name: &str) -> PResult<(String, Option<String>)> {
 		return Ok((remainder.to_string(), None));
 	}
 	Ok((separate.join("."), Some(remainder.to_string())))
-}
-
-fn space_mapper(c: char) -> char {
-	match c {
-		' ' => '_',
-		'-' => '_',
-		_ => c,
-	}
 }
 
 #[cfg(test)]

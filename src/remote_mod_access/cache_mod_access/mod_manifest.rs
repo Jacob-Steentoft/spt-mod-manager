@@ -4,11 +4,10 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use versions::Versioning;
-use crate::cache_mod_access::separate_file_and_ext;
-use crate::remote_mod_access::ModDownloadVersion;
+use crate::remote_mod_access::cache_mod_access::separate_file_and_ext;
 use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ModManifest {
 	name: String,
 	version: Versioning,
@@ -26,10 +25,6 @@ impl<Download: ModVersionDownload> From<&Download> for ModManifest {
 }
 
 impl ModManifest {
-	pub fn is_mod_version(&self, mod_version: &ModDownloadVersion) -> bool {
-		self.version == mod_version.version
-	}
-
 	pub fn create_manifest_path(mod_path: PathBuf, mod_file_name: &str) -> anyhow::Result<PathBuf> {
 		let (manifest_file_name, _) = separate_file_and_ext(mod_file_name).map_err(|_| anyhow!("Failed to get file"))?;
 		let manifest_file_name = format!("{}.manifest", manifest_file_name);
