@@ -1,3 +1,5 @@
+mod zip_data;
+
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -5,15 +7,16 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use crate::shared_traits::{ModName, TimeProvider};
+use crate::spt_access::zip_data::ZipData;
 use anyhow::{anyhow, Context, Result};
+use compress_tools::{ArchiveContents, ArchiveIterator, ArchiveIteratorBuilder, Ownership};
 use walkdir::WalkDir;
 use winnow::combinator::{empty, opt, separated};
 use winnow::prelude::*;
 use winnow::token::take_until;
 use winnow::{dispatch, PResult};
-use zip::read::ZipFile;
-use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
+use zip::write::SimpleFileOptions;
 
 #[derive(Clone)]
 enum FileType {
@@ -28,43 +31,6 @@ pub enum InstallTarget {
 	Client,
 }
 
-struct ZipData {
-	data: Vec<u8>,
-	hash: String,
-	zip_path: String,
-	file_type: FileType,
-}
-
-impl ZipData {
-	fn try_from(zip_file: ZipFile) -> Result<Option<Self>> {
-		if !zip_file.is_file() {
-			return Ok(None);
-		}
-		let zip_path = zip_file
-			.enclosed_name()
-			.and_then(|pb| pb.to_str().map(|str| str.to_string()))
-			.context(format!(
-				"Failed to get zip file path for: {}",
-				zip_file.name()
-			))?;
-		let (data, hash) = get_data_and_hash(zip_file)?;
-		let file_type = file_parser(&mut zip_path.as_str());
-		Ok(Some(Self {
-			hash,
-			data,
-			zip_path,
-			file_type,
-		}))
-	}
-
-	fn should_install(&self, target: &InstallTarget) -> bool {
-		matches!(
-			(&self.file_type, target),
-			(FileType::Client, InstallTarget::Client) | (FileType::Server, _)
-		)
-	}
-}
-
 pub struct SptAccess<Time: TimeProvider> {
 	server_mods_path: PathBuf,
 	client_mods_path: PathBuf,
@@ -74,8 +40,8 @@ pub struct SptAccess<Time: TimeProvider> {
 }
 
 impl<Time: TimeProvider> SptAccess<Time> {
-	pub fn init<P: AsRef<Path>>(root_path: P, time: Time) -> Result<Self> {
-		let path = root_path.as_ref();
+	pub fn init<P: AsRef<Path>>(root_path: P, cache_path: P, time: Time) -> Result<Self> {
+		let path = cache_path.as_ref();
 		let install_index = path.join("install_hash");
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index)?;
@@ -83,7 +49,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		Ok(Self {
 			server_mods_path: path.join("user/mods/"),
 			client_mods_path: path.join("BepInEx/plugins/"),
-			root_path: PathBuf::from(path),
+			root_path: PathBuf::from(root_path.as_ref()),
 			time,
 			install_index,
 		})
@@ -95,19 +61,35 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		install_target: InstallTarget,
 	) -> Result<()> {
 		let mut map = HashMap::new();
-		let mut zip = ZipArchive::new(BufReader::new(File::open(mod_archive_path)?))?;
-		let zip_length = zip.len();
-		for index in 0..zip_length {
-			let Some(zip_data) = ZipData::try_from(zip.by_index(index)?)? else {
-				continue;
-			};
-			if !zip_data.should_install(&install_target) {
-				continue;
+		let archive_iter = new_file_archive_iter(BufReader::new(File::open(mod_archive_path)?))?;
+
+		let mut buffer = Vec::default();
+		let mut zip_path = String::default();
+		for content in archive_iter {
+			match content {
+				ArchiveContents::StartOfEntry(name, _) => {
+					zip_path = name;
+				}
+				ArchiveContents::DataChunk(mut data) => buffer.append(&mut data),
+				ArchiveContents::EndOfEntry => {
+					let zip_data = ZipData::new(&buffer, &zip_path);
+					if !zip_data.should_install(&install_target) {
+						continue;
+					}
+					map.insert(
+						zip_data.get_path().to_string(),
+						zip_data.get_hash().to_string(),
+					);
+					self.write_file_to_tarkov(zip_data)?;
+					buffer = Vec::default();
+					zip_path = String::default();
+				}
+				ArchiveContents::Err(err) => {
+					return Err(err.into());
+				}
 			}
-			map.insert(zip_data.zip_path.clone(), zip_data.hash.clone());
-			self.write_file_to_tarkov(zip_data)?;
 		}
-		
+
 		let mod_name = self.install_index.join(spt_mod.to_file_name());
 		let writer = BufWriter::new(File::create(mod_name)?);
 		serde_json::to_writer(writer, &map)?;
@@ -125,21 +107,35 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		if !mod_name.is_file() {
 			return Ok(false);
 		}
-		let map: HashMap<String, String> = serde_json::from_reader(BufReader::new(File::open(mod_name)?))?;
-		let mut zip = ZipArchive::new(BufReader::new(File::open(mod_archive_path)?))?;
-		let zip_length = zip.len();
-		for index in 0..zip_length {
-			let Some(zip_data) = ZipData::try_from(zip.by_index(index)?)? else {
-				continue;
-			};
-			if !zip_data.should_install(&install_target) {
-				continue;
-			}
-			if !map
-				.get(&zip_data.zip_path)
-				.is_some_and(|str| str == &zip_data.hash)
-			{
-				return Ok(false);
+		let map: HashMap<String, String> =
+			serde_json::from_reader(BufReader::new(File::open(mod_name)?))?;
+		let archive_iter = new_file_archive_iter(BufReader::new(File::open(mod_archive_path)?))?;
+
+		let mut buffer = Vec::default();
+		let mut zip_path = String::default();
+		for content in archive_iter {
+			match content {
+				ArchiveContents::StartOfEntry(name, _) => {
+					zip_path = name;
+				}
+				ArchiveContents::DataChunk(mut data) => buffer.append(&mut data),
+				ArchiveContents::EndOfEntry => {
+					let zip_data = ZipData::new(&buffer, &zip_path);
+					if !zip_data.should_install(&install_target) {
+						continue;
+					}
+					if !map
+						.get(zip_data.get_path())
+						.is_some_and(|str| str == zip_data.get_hash())
+					{
+						return Ok(false);
+					}
+					buffer = Vec::default();
+					zip_path = String::default();
+				}
+				ArchiveContents::Err(err) => {
+					return Err(err.into());
+				}
 			}
 		}
 		Ok(true)
@@ -151,8 +147,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		install_path: impl AsRef<Path>,
 	) -> Result<()> {
 		let reader = BufReader::new(File::open(mod_archive_path)?);
-		let mut archive = ZipArchive::new(reader)?;
-		archive.extract(install_path)?;
+		compress_tools::uncompress_archive(reader, install_path.as_ref(), Ownership::Ignore)?;
 		Ok(())
 	}
 
@@ -176,24 +171,18 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		Ok(())
 	}
 
-	fn write_file_to_tarkov(&self, zip_data: ZipData, ) -> Result<()> {
-		let path = self.root_path.join(zip_data.zip_path);
-		if let Some(dir_path) = dir_parser(path.to_str().context("Failed to parse install path")?).map_err(|_| anyhow!("Failed to parse install path"))?
+	fn write_file_to_tarkov(&self, zip_data: ZipData) -> Result<()> {
+		let path = self.root_path.join(zip_data.get_path());
+		if let Some(dir_path) = dir_parser(path.to_str().context("Failed to parse install path")?)
+			.map_err(|_| anyhow!("Failed to parse install path"))?
 		{
 			fs::create_dir_all(dir_path)?;
 		}
 
 		let mut writer = BufWriter::new(File::create(path)?);
-		writer.write_all(&zip_data.data)?;
+		writer.write_all(zip_data.get_data())?;
 		Ok(())
 	}
-}
-
-fn get_data_and_hash(mut zip: ZipFile) -> Result<(Vec<u8>, String)> {
-	let mut buffer = Vec::new();
-	zip.read_to_end(&mut buffer)?;
-	let hash = sha256::digest(&buffer);
-	Ok((buffer, hash))
 }
 
 fn backup_folder_content(
@@ -219,6 +208,11 @@ fn backup_folder_content(
 	}
 
 	Ok(())
+}
+fn new_file_archive_iter(reader: BufReader<File>) -> Result<ArchiveIterator<BufReader<File>>> {
+	Ok(ArchiveIteratorBuilder::new(reader)
+		.filter(|name, _| !name.ends_with('/'))
+		.build()?)
 }
 
 fn dir_parser(file_path: &str) -> PResult<Option<&str>> {
@@ -268,7 +262,7 @@ mod tests {
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
 		let path = "./test_output/restore_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path, provider)
+		SptAccess::init(path,path, provider)
 			.unwrap()
 			.restore_from(buf)
 			.unwrap();
@@ -286,7 +280,7 @@ mod tests {
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
 		let path = "./test_output/install_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path, provider)
+		SptAccess::init(path,path, provider)
 			.unwrap()
 			.install_mod(buf, &TestModName("Test".to_string()), InstallTarget::Client)
 			.unwrap();
@@ -302,7 +296,8 @@ mod tests {
 		let path = PathBuf::from("./test_output/backup_test");
 		let _discard = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).unwrap();
-		SptAccess::init("./test_data/backed_up_data", provider)
+		let path1 = "./test_data/backed_up_data";
+		SptAccess::init(path1, path1, provider)
 			.unwrap()
 			.backup_to(&path)
 			.unwrap();

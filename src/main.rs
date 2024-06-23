@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
 
 	let mut remote_access = RemoteModAccess::setup(TEMP_PATH)?;
 	let cfg_access = ConfigurationAccess::new();
-	let spt_access = SptAccess::init(TEMP_PATH, Time::new())?;
+	let spt_access = SptAccess::init("./", TEMP_PATH, Time::new())?;
 
 	match args.command {
 		Commands::Update {

@@ -4,7 +4,8 @@ use octocrab::Octocrab;
 use versions::Versioning;
 use winnow::{Parser, PResult};
 use winnow::combinator::opt;
-use winnow::token::{take, take_until};
+use winnow::stream::AsChar;
+use winnow::token::{take, take_till, take_until};
 
 use crate::remote_mod_access::ModDownloadVersion;
 
@@ -65,12 +66,12 @@ impl GithubClient {
 			})?;
 
 		let version = release.name.context("Found no name")?;
-		let option = Versioning::new(&version).context("Couldn't parse version")?;
+		let version = parse_version(&version).ok().flatten().context("Failed to parse version")?;
 		Ok(ModDownloadVersion {
 			title: mod_title,
 			file_name: asset.name,
 			download_url: asset.browser_download_url,
-			version: option,
+			version,
 			uploaded_at: asset.created_at,
 		})
 	}
@@ -125,6 +126,12 @@ fn validate_url(input: &str) -> PResult<(String, String)> {
 	let repo = repo.unwrap_or(remainder);
 	
 	Ok((owner.to_string(), repo.to_string()))
+}
+
+pub fn parse_version(version: &str) -> PResult<Option<Versioning>>{
+	let (remainder, _) = take_till(0.., AsChar::is_dec_digit).parse_peek(version)?;
+	let version = Versioning::parse(remainder).ok().map(|(_, version)| version);
+	Ok(version)
 }
 
 #[cfg(test)]
