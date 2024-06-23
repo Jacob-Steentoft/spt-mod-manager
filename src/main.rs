@@ -110,7 +110,7 @@ async fn update(
 	for mod_cfg in mod_cfg {
 		let mod_url = mod_cfg.url;
 
-		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern) {
+		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern, mod_cfg.github_filter) {
 			Ok(mod_kind) => mod_kind,
 			Err(err) => {
 				println!("Failed to parse mod with: {err}");

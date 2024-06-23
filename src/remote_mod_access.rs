@@ -25,7 +25,7 @@ pub enum ModKind {
 }
 
 impl ModKind {
-	pub fn parse<S: AsRef<str>>(url: S, gh_pattern: Option<String>) -> Result<Self> {
+	pub fn parse<S: AsRef<str>>(url: S, gh_pattern: Option<String>, gh_filter: Option<String>) -> Result<Self> {
 		if SptLink::starts_with_host(&url) {
 			return Ok(Self::SpTarkov(SptLink::parse(url)?));
 		}
@@ -35,7 +35,7 @@ impl ModKind {
 				return Err(anyhow!("No asset pattern was provided for Github"));
 			};
 
-			return Ok(Self::GitHub(GitHubLink::parse(url, pattern)?));
+			return Ok(Self::GitHub(GitHubLink::parse(url, pattern, gh_filter)?));
 		}
 		Err(anyhow!("Unsupported mod host: {}", url.as_ref()))
 	}

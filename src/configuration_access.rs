@@ -12,6 +12,7 @@ pub struct ModConfiguration{
 	pub version: Option<Versioning>,
 	pub github_pattern: Option<String>,
 	pub install_path: Option<String>,
+	pub github_filter: Option<String>,
 }
 
 pub struct ConfigurationAccess {
@@ -48,6 +49,7 @@ mod tests {
 			version: None,
 			github_pattern: None,
 			install_path: None,
+			github_filter: None,
 		});
 		assert_eq!(option, Some(vec1));
 	}

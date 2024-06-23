@@ -1,5 +1,6 @@
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use anyhow::Result;
+use octocrab::models::repos::{Asset, Release};
 use octocrab::Octocrab;
 use versions::Versioning;
 use winnow::{Parser, PResult};
@@ -12,16 +13,18 @@ use crate::remote_mod_access::ModDownloadVersion;
 pub struct GitHubLink {
 	owner: String,
 	repo: String,
-	assert_pattern: String,
+	asset_pattern: String,
+	asset_filter: Option<String>,
 }
 
 impl GitHubLink {
-	pub fn parse<S: AsRef<str>>(url: S, assert_pattern: String) -> Result<Self> {
+	pub fn parse<S: AsRef<str>>(url: S, asset_pattern: String, asset_filter: Option<String>) -> Result<Self> {
 		let (owner, repo) = validate_url(url.as_ref()).map_err(|_| anyhow!("Failed to parse"))?;
 		Ok(Self {
 			owner,
 			repo,
-			assert_pattern,
+			asset_pattern,
+			asset_filter
 		})
 	}
 
@@ -54,23 +57,14 @@ impl GithubClient {
 			.get_latest()
 			.await?;
 
-		let asset = release
-			.assets
-			.into_iter()
-			.find(|ass| ass.name.contains(&gh_mod.assert_pattern))
-			.with_context(|| {
-				format!(
-					"Failed to find assert from pattern: {}",
-					&gh_mod.assert_pattern
-				)
-			})?;
+		let version = release.name.clone().context("Found no name")?;
+		let asset = Self::filter_asset(&gh_mod, release)?;
 
-		let version = release.name.context("Found no name")?;
 		let version = parse_version(&version).ok().flatten().context("Failed to parse version")?;
 		Ok(ModDownloadVersion {
 			title: mod_title,
-			file_name: asset.name,
-			download_url: asset.browser_download_url,
+			file_name: asset.name.clone(),
+			download_url: asset.browser_download_url.clone(),
 			version,
 			uploaded_at: asset.created_at,
 		})
@@ -96,16 +90,7 @@ impl GithubClient {
 			return Ok(None)
 		};
 
-		let asset = release
-			.assets
-			.into_iter()
-			.find(|ass| ass.name.contains(&gh_mod.assert_pattern))
-			.with_context(|| {
-				format!(
-					"Failed to find assert from pattern: {}",
-					&gh_mod.assert_pattern
-				)
-			})?;
+		let asset = Self::filter_asset(&gh_mod, release)?;
 
 		Ok(Some(ModDownloadVersion {
 			title: mod_title,
@@ -114,6 +99,33 @@ impl GithubClient {
 			version: version.clone(),
 			uploaded_at: asset.created_at,
 		}))
+	}
+
+	fn filter_asset(gh_mod: &GitHubLink, release:  Release) -> Result<Asset, Error> {
+		if let Some(filter) = &gh_mod.asset_filter{
+			return release
+				.assets
+				.into_iter()
+				.find(|ass| ass.name.contains(&gh_mod.asset_pattern) && !ass.name.contains(filter))
+				.with_context(|| {
+					format!(
+						"Failed to find assert from pattern: {}, and filter: {:?}",
+						&gh_mod.asset_pattern,
+						&gh_mod.asset_filter
+					)
+				})
+		};
+		release
+			.assets
+			.into_iter()
+			.find(|ass| ass.name.contains(&gh_mod.asset_pattern))
+			.with_context(|| {
+				format!(
+					"Failed to find assert from pattern: {}, and filter: {:?}",
+					&gh_mod.asset_pattern,
+					&gh_mod.asset_filter
+				)
+			})
 	}
 }
 
