@@ -15,8 +15,8 @@ use winnow::combinator::{empty, opt, separated};
 use winnow::prelude::*;
 use winnow::token::take_until;
 use winnow::{dispatch, PResult};
-use zip::{ZipArchive, ZipWriter};
 use zip::write::SimpleFileOptions;
+use zip::{ZipArchive, ZipWriter};
 
 #[derive(Clone)]
 enum FileType {
@@ -65,6 +65,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 
 		let mut buffer = Vec::default();
 		let mut zip_path = String::default();
+		let mut installed_file_counter = 0;
 		for content in archive_iter {
 			match content {
 				ArchiveContents::StartOfEntry(name, _) => {
@@ -81,6 +82,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 						zip_data.get_hash().to_string(),
 					);
 					self.write_file_to_tarkov(zip_data)?;
+					installed_file_counter += 1;
 					buffer = Vec::default();
 					zip_path = String::default();
 				}
@@ -88,6 +90,10 @@ impl<Time: TimeProvider> SptAccess<Time> {
 					return Err(err.into());
 				}
 			}
+		}
+
+		if installed_file_counter == 0 {
+			return Err(anyhow!("No files with a structured installation path was found"));
 		}
 
 		let mod_name = self.install_index.join(spt_mod.to_file_name());
@@ -262,7 +268,7 @@ mod tests {
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
 		let path = "./test_output/restore_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path,path, provider)
+		SptAccess::init(path, path, provider)
 			.unwrap()
 			.restore_from(buf)
 			.unwrap();
@@ -280,7 +286,7 @@ mod tests {
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
 		let path = "./test_output/install_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path,path, provider)
+		SptAccess::init(path, path, provider)
 			.unwrap()
 			.install_mod(buf, &TestModName("Test".to_string()), InstallTarget::Client)
 			.unwrap();

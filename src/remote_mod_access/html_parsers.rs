@@ -60,7 +60,7 @@ pub fn spt_parse_mod_page(document: &str) -> Result<SptMod> {
 			.select(&TIME_SELECTOR)
 			.next()
 			.and_then(|e| e.attr("data-timestamp"))
-			.context("Failed to find time")?;
+			.context("Failed to find time for version")?;
 
 		let unix_timestamp = time_value.parse::<i64>()?;
 		let time = DateTime::<Utc>::from_timestamp(unix_timestamp, 0)
@@ -90,7 +90,8 @@ pub fn spt_parse_mod_page(document: &str) -> Result<SptMod> {
 
 pub fn parse_version(version: &str) -> PResult<Option<Versioning>>{
 	let (remainder, _) = take_till(0.., AsChar::is_dec_digit).parse_peek(version)?;
-	Ok(Versioning::new(remainder))
+	let version = Versioning::parse(remainder).ok().map(|(_, version)| version);
+	Ok(version)
 }
 
 pub fn spt_parse_download(document: &str) -> Result<Url> {

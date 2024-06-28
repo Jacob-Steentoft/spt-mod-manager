@@ -1,5 +1,7 @@
+use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use reqwest::{Client};
+use tokio::time::{Instant, sleep, sleep_until};
 use url::Url;
 use versions::Versioning;
 use winnow::ascii::digit1;
@@ -12,14 +14,17 @@ use crate::remote_mod_access::html_parsers::SptMod;
 
 pub struct SptClient {
 	client: Client,
+	last_request: Instant,
+	request_delay: Duration,
 }
 
 impl SptClient {
 	pub fn new(client: Client) -> Self {
-		Self { client }
+		Self { client, last_request: Instant::now(), request_delay: Duration::from_millis(500) }
 	}
 
-	pub async fn get_latest_version(&self, spt_link: SptLink) -> Result<ModDownloadVersion> {
+	pub async fn get_latest_version(&mut self, spt_link: SptLink) -> Result<ModDownloadVersion> {
+		sleep(Duration::from_millis(100)).await;
 		let spt_mod = self.get_all_versions(spt_link).await?;
 		let mod_version = spt_mod
 			.versions
@@ -27,10 +32,11 @@ impl SptClient {
 			.max_by(|x, x1| x.version.cmp(&x1.version))
 			.context("Found no mods")?;
 
+		sleep(Duration::from_millis(300)).await;
 		let download_url = self.get_mod_dl_link(mod_version.download_url).await?;
 
 		let file_name = get_mod_filename(download_url.as_str())
-			.map_err(|_| anyhow!("Failed to parse file name to download"))?;
+			.map_err(|_| anyhow!("Failed to parse file to download for url: {}", download_url))?;
 		
 		Ok(ModDownloadVersion {
 			title: spt_mod.title,
@@ -42,7 +48,7 @@ impl SptClient {
 	}
 
 	pub async fn get_version(
-		&self,
+		&mut self,
 		spt_link: SptLink,
 		version: &Versioning,
 	) -> Result<Option<ModDownloadVersion>> {
@@ -57,7 +63,7 @@ impl SptClient {
 		};
 
 		let file_name = get_mod_filename(mod_version.download_url.as_str())
-			.map_err(|_| anyhow!("Failed to parse file name to download"))?;
+			.map_err(|_| anyhow!("Failed to parse file to download for url: {}", mod_version.download_url))?;
 
 		Ok(Some(ModDownloadVersion {
 			title: spt_mod.title,
@@ -68,29 +74,30 @@ impl SptClient {
 		}))
 	}
 
-	async fn get_all_versions(&self, spt_link: SptLink) -> Result<SptMod> {
+	async fn get_all_versions(&mut self, spt_link: SptLink) -> Result<SptMod> {
 		let url = spt_link.get_versions_page()?;
-		let response = self
-			.client
-			.get(url.clone())
-			.send()
-			.await?
-			.error_for_status()?;
-		let document = response.text().await?;
-		let mod_versions = html_parsers::spt_parse_mod_page(&document)?;
+		let html = self.get_html(&url).await?;
+		let mod_versions = html_parsers::spt_parse_mod_page(&html).map_err(|err| anyhow!(err))?;
 		Ok(mod_versions)
 	}
 
-	async fn get_mod_dl_link(&self, external_url: Url) -> Result<Url> {
+	async fn get_mod_dl_link(&mut self, external_url: Url) -> Result<Url> {
+		let html = self.get_html(&external_url).await?;
+		html_parsers::spt_parse_download(&html)
+	}
+
+	async fn get_html(&mut self, url: &Url) -> Result<String>{
+		sleep_until( self.last_request + self.request_delay).await;
+		self.last_request = Instant::now();
 		let html = self
 			.client
-			.get(external_url)
+			.get(url.clone())
 			.send()
 			.await?
 			.error_for_status()?
 			.text()
 			.await?;
-		html_parsers::spt_parse_download(&html)
+		Ok(html)
 	}
 }
 
@@ -102,7 +109,8 @@ pub struct SptLink {
 impl SptLink {
 	pub fn parse<S: AsRef<str>>(url: S) -> Result<Self> {
 		let url = url.as_ref();
-		validate_url(url).map_err(|err| anyhow!("Failed to parse SP Tarkov url: {}", err))?;
+		// TODO: Improve validation to return file name
+		validate_url(url).map_err(|_| anyhow!("Failed to parse SP Tarkov url"))?;
 		let link = if !url.ends_with('/') {
 			Url::parse(&format!("{}/", url))?
 		}
@@ -136,6 +144,7 @@ fn validate_url(input: &str) -> PResult<()> {
 fn get_mod_filename(input: &str) -> PResult<String> {
 	let (parsed, _) = "https://".parse_peek(input)?;
 	let (file_name, _): (&str, Vec<_>) = repeat(1.., filename_parser).parse_peek(parsed)?;
+	take_until(1.., '.').parse_peek(file_name)?;
 	Ok(file_name.to_string())
 }
 

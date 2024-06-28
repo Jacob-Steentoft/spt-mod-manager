@@ -1,0 +1,48 @@
+[
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1963-better-keys-updated"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1062-sain-2-0-solarint-s-ai-modifications-full-ai-combat-system-replacement/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1303-borkel-s-realistic-night-vision-goggles-nvgs-and-t-7/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1534-questing-bots/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1119-waypoints-expanded-navmesh/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1219-bigbrain/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/878-swag-donuts-dynamic-spawn-waves-and-custom-spawn-points/"
+  },
+  {
+    "url": "https://github.com/space-commits/SPT-Realism-Mod-Client/releases",
+    "github_pattern": "Realism-Mod"
+  },
+  {
+    "url": "https://github.com/space-commits/Realism-Stance-Replication/releases",
+    "github_pattern": "RealismStanceReplication"
+  },
+  {
+    "url": "https://github.com/space-commits/SPT-FOV-Fix/releases",
+    "github_pattern": "Fontaine-FOV-Fix"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1096-looting-bots/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/813-amands-s-graphics/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/1114-task-list-fixes/"
+  },
+  {
+    "url": "https://hub.sp-tarkov.com/files/file/771-custom-raid-times/",
+    "version": "1.6.0"
+  }
+]

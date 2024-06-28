@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::configuration_access::ConfigurationAccess;
 use crate::remote_mod_access::{ModKind, RemoteModAccess};
@@ -110,10 +111,11 @@ async fn update(
 	for mod_cfg in mod_cfg {
 		let mod_url = mod_cfg.url;
 
-		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern, mod_cfg.github_filter) {
+		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern, mod_cfg.github_filter)
+		{
 			Ok(mod_kind) => mod_kind,
 			Err(err) => {
-				println!("Failed to parse mod with: {err}");
+				println!("Failed to parse '{mod_url}' with: {err}");
 				continue;
 			}
 		};
@@ -124,17 +126,34 @@ async fn update(
 		let cached_mod = match mod_cfg.version {
 			None => {
 				bar.set_message(format!("Finding newest version online for: {mod_url}"));
-				remote_mod_access.get_newest_release(mod_kind).await?
+				let result = remote_mod_access.get_newest_release(mod_kind).await;
+				match result {
+					Ok(mod_version) => mod_version,
+					Err(err) => {
+						fail_with_error(bar, format!("Failed storing mod '{mod_url}' with error: {err}"));
+						continue;
+					}
+				}
 			}
 			Some(version) => {
 				bar.set_message(format!("Finding version '{version}' online for: {mod_url}"));
-				let option = remote_mod_access
+
+				let option = match remote_mod_access
 					.get_specific_version(mod_kind, &version)
-					.await?;
+					.await
+				{
+					Ok(mod_version) => mod_version,
+					Err(err) => {
+						fail_with_error(bar, format!("Failed to find versions for '{mod_url}' with error: {err}"));
+						continue;
+					}
+				};
+
 				let Some(cached_mod) = option else {
-					bar.finish_with_message(format!(
-						"Did not find version: {version}, for: {mod_url}"
-					));
+					fail_with_error(
+						bar,
+						format!("Failed to find version '{version}' for: {mod_url}"),
+					);
 					continue;
 				};
 				cached_mod
@@ -153,12 +172,19 @@ async fn update(
 				bar.finish_with_message(format!(
 					"Newest version has already been installed for: {mod_url}"
 				));
-				continue
+				continue;
 			}
-			spt_access.install_mod(&cached_mod.path, cached_mod, install_target)?;
-			bar.finish_with_message(format!(
-				"The newest version has been installed for: {mod_url}"
-			));
+			match spt_access.install_mod(&cached_mod.path, cached_mod, install_target) {
+				Ok(_) => {
+					bar.finish_with_message(format!(
+						"The newest version has been installed for: {mod_url}"
+					));
+				}
+				Err(err) => fail_with_error(
+					bar,
+					format!("Failed to install '{mod_url}' with error: {err}"),
+				),
+			};
 		};
 	}
 	Ok(())
@@ -180,4 +206,9 @@ fn backup(spt_access: &SptAccess<Time>, backup_to_path: &str) -> Result<()> {
 	spt_access.backup_to(backup_to_path)?;
 	bar.finish_with_message(format!("Restored your files from: {backup_to_path}"));
 	Ok(())
+}
+
+fn fail_with_error(bar: ProgressBar, msg: impl Into<Cow<'static, str>>) {
+	bar.set_style(ProgressStyle::with_template("{spinner} {msg:.red}").unwrap());
+	bar.finish_with_message(msg);
 }

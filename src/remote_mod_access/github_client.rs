@@ -44,6 +44,7 @@ impl GithubClient {
 		}
 	}
 	pub async fn get_newest_github_release(&self, gh_mod: GitHubLink) -> Result<ModDownloadVersion> {
+		// TODO: Handle rate limits 
 		let mod_title = self
 			.octo
 			.repos(&gh_mod.owner, &gh_mod.repo)

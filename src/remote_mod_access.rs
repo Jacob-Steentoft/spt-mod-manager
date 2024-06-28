@@ -91,6 +91,7 @@ impl RemoteModAccess {
 	}
 
 	pub async fn get_newest_release(&mut self, mod_entry: ModKind) -> Result<&CachedModVersion> {
+		// TODO: Handle rate limits
 		let mod_version = match mod_entry {
 			ModKind::GitHub(gh_mod) => self.github.get_newest_github_release(gh_mod).await?,
 			ModKind::SpTarkov(link) => self.spt_client.get_latest_version(link).await?,
@@ -116,6 +117,7 @@ impl RemoteModAccess {
 		mod_kind: ModKind,
 		version: &Versioning,
 	) -> Result<Option<&CachedModVersion>> {
+		// TODO: Handle rate limits
 		let mod_version = match mod_kind {
 			ModKind::GitHub(gh_mod) => self.github.get_version(gh_mod, version).await?,
 			ModKind::SpTarkov(spt_mod) => self.spt_client.get_version(spt_mod, version).await?,
