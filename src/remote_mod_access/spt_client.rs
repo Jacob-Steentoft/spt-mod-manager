@@ -183,7 +183,7 @@ fn parse_download_link(download_link: &Url) -> DownloadLink{
 		return DownloadLink::GoogleDrive{file_id}
 	}
 
-	return DownloadLink::Unknown
+	DownloadLink::Unknown
 }
 
 fn get_google_file_id(input: &str) -> PResult<String> {

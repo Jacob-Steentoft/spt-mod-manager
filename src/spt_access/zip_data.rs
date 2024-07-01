@@ -10,7 +10,8 @@ pub struct ZipData<'a> {
 impl<'a> ZipData<'a> {
 	pub fn new(data: &'a [u8], zip_path: &'a str) -> Self{
 		let hash = sha256::digest(data);
-		let file_type = file_parser(&mut zip_path.as_ref());
+		let mut name = zip_path;
+		let file_type = file_parser(&mut name);
 		Self {
 			hash,
 			data,

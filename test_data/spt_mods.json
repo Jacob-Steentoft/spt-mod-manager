@@ -26,7 +26,8 @@
   },
   {
     "url": "https://github.com/space-commits/Realism-Stance-Replication/releases",
-    "github_pattern": "RealismStanceReplication"
+    "github_pattern": "RealismStanceReplication",
+    "install_path": "BepInEx/plugins"
   },
   {
     "url": "https://github.com/space-commits/SPT-FOV-Fix/releases",
