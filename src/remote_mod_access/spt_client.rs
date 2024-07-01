@@ -1,7 +1,8 @@
 use std::time::Duration;
+
 use anyhow::{anyhow, Context, Result};
-use reqwest::{Client};
-use tokio::time::{Instant, sleep, sleep_until};
+use reqwest::Client;
+use tokio::time::{Instant, sleep_until};
 use url::Url;
 use versions::Versioning;
 use winnow::ascii::digit1;
@@ -18,13 +19,21 @@ pub struct SptClient {
 	request_delay: Duration,
 }
 
+#[derive(Clone)]
+enum DownloadLink{
+	File{
+		file_name: String,
+	},
+	GoogleDrive{file_id: String},
+	Unknown,
+}
+
 impl SptClient {
 	pub fn new(client: Client) -> Self {
 		Self { client, last_request: Instant::now(), request_delay: Duration::from_millis(500) }
 	}
 
 	pub async fn get_latest_version(&mut self, spt_link: SptLink) -> Result<ModDownloadVersion> {
-		sleep(Duration::from_millis(100)).await;
 		let spt_mod = self.get_all_versions(spt_link).await?;
 		let mod_version = spt_mod
 			.versions
@@ -32,11 +41,7 @@ impl SptClient {
 			.max_by(|x, x1| x.version.cmp(&x1.version))
 			.context("Found no mods")?;
 
-		sleep(Duration::from_millis(300)).await;
-		let download_url = self.get_mod_dl_link(mod_version.download_url).await?;
-
-		let file_name = get_mod_filename(download_url.as_str())
-			.map_err(|_| anyhow!("Failed to parse file to download for url: {}", download_url))?;
+		let (download_url, file_name) = self.parse_download(mod_version.download_url).await?;
 		
 		Ok(ModDownloadVersion {
 			title: spt_mod.title,
@@ -62,33 +67,61 @@ impl SptClient {
 			return Ok(None);
 		};
 
-		let file_name = get_mod_filename(mod_version.download_url.as_str())
-			.map_err(|_| anyhow!("Failed to parse file to download for url: {}", mod_version.download_url))?;
+		let (download_url, file_name) = self.parse_download(mod_version.download_url).await?;
 
 		Ok(Some(ModDownloadVersion {
 			title: spt_mod.title,
 			version: mod_version.version,
 			uploaded_at: mod_version.uploaded_at,
-			download_url: mod_version.download_url,
+			download_url,
 			file_name,
 		}))
 	}
 
+	async fn parse_download(&mut self, url: Url) -> Result<(Url, String)> {
+		let download_url = self.get_mod_dl_link(url).await?;
+
+		let (download_url, file_name) = match parse_download_link(&download_url) {
+			DownloadLink::File { file_name } => (download_url, file_name),
+			DownloadLink::GoogleDrive { file_id } => {
+				let url = Url::parse(&format!("https://drive.usercontent.google.com/download?id={file_id}"))?;
+				let html = self.get_html(&url).await?;
+				html_parsers::google_parse_download(&html)?
+			}
+			DownloadLink::Unknown => {
+				let error = anyhow!("Failed to parse file to download for url: {}", download_url);
+				return Err(error)
+			}
+		};
+		Ok((download_url, file_name))
+	}
+
 	async fn get_all_versions(&mut self, spt_link: SptLink) -> Result<SptMod> {
 		let url = spt_link.get_versions_page()?;
-		let html = self.get_html(&url).await?;
+		let html = self.get_spt_html(&url).await?;
 		let mod_versions = html_parsers::spt_parse_mod_page(&html).map_err(|err| anyhow!(err))?;
 		Ok(mod_versions)
 	}
 
 	async fn get_mod_dl_link(&mut self, external_url: Url) -> Result<Url> {
-		let html = self.get_html(&external_url).await?;
+		let html = self.get_spt_html(&external_url).await?;
 		html_parsers::spt_parse_download(&html)
 	}
 
-	async fn get_html(&mut self, url: &Url) -> Result<String>{
+	async fn get_spt_html(&mut self, url: &Url) -> Result<String>{
 		sleep_until( self.last_request + self.request_delay).await;
 		self.last_request = Instant::now();
+		let html = self
+			.client
+			.get(url.clone())
+			.send()
+			.await?
+			.error_for_status()?
+			.text()
+			.await?;
+		Ok(html)
+	}
+	async fn get_html(&self, url: &Url) -> Result<String>{
 		let html = self
 			.client
 			.get(url.clone())
@@ -141,6 +174,25 @@ fn validate_url(input: &str) -> PResult<()> {
 	Ok(())
 }
 
+fn parse_download_link(download_link: &Url) -> DownloadLink{
+	let str = download_link.as_str();
+	if let Ok(file_name) = get_mod_filename(str) {
+		return DownloadLink::File{file_name }
+	}
+	if let Ok(file_id) = get_google_file_id(str) {
+		return DownloadLink::GoogleDrive{file_id}
+	}
+
+	return DownloadLink::Unknown
+}
+
+fn get_google_file_id(input: &str) -> PResult<String> {
+	let (parsed, _) = "https://drive.google.com/file/d/".parse_peek(input)?;
+	let (_, file_id) = take_until(1.., "/").parse_peek(parsed)?;
+
+	Ok(file_id.to_string())
+}
+
 fn get_mod_filename(input: &str) -> PResult<String> {
 	let (parsed, _) = "https://".parse_peek(input)?;
 	let (file_name, _): (&str, Vec<_>) = repeat(1.., filename_parser).parse_peek(parsed)?;
@@ -160,7 +212,7 @@ mod tests {
 	#[tokio::test]
 	#[ignore]
 	async fn it_works() {
-		let client = SptClient::new(Client::new());
+		let mut client = SptClient::new(Client::new());
 		let spt_mod =
 			SptLink::parse("https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/")
 				.unwrap();

@@ -44,13 +44,7 @@ impl GithubClient {
 		}
 	}
 	pub async fn get_newest_github_release(&self, gh_mod: GitHubLink) -> Result<ModDownloadVersion> {
-		// TODO: Handle rate limits 
-		let mod_title = self
-			.octo
-			.repos(&gh_mod.owner, &gh_mod.repo)
-			.get()
-			.await?
-			.name;
+		// TODO: Handle rate limits
 		let release = self
 			.octo
 			.repos(&gh_mod.owner, &gh_mod.repo)
@@ -63,7 +57,7 @@ impl GithubClient {
 
 		let version = parse_version(&version).ok().flatten().context("Failed to parse version")?;
 		Ok(ModDownloadVersion {
-			title: mod_title,
+			title: gh_mod.repo,
 			file_name: asset.name.clone(),
 			download_url: asset.browser_download_url.clone(),
 			version,
@@ -72,13 +66,6 @@ impl GithubClient {
 	}
 
 	pub async fn get_version(&self, gh_mod: GitHubLink, version: &Versioning) -> Result<Option<ModDownloadVersion>>{
-		let mod_title = self
-			.octo
-			.repos(&gh_mod.owner, &gh_mod.repo)
-			.get()
-			.await?
-			.name;
-
 		let releases = self
 			.octo
 			.repos(&gh_mod.owner, &gh_mod.repo)
@@ -94,7 +81,7 @@ impl GithubClient {
 		let asset = Self::filter_asset(&gh_mod, release)?;
 
 		Ok(Some(ModDownloadVersion {
-			title: mod_title,
+			title: gh_mod.repo,
 			file_name: asset.name,
 			download_url: asset.browser_download_url,
 			version: version.clone(),

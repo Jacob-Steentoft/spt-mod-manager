@@ -115,6 +115,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		}
 		let map: HashMap<String, String> =
 			serde_json::from_reader(BufReader::new(File::open(mod_name)?))?;
+		
 		let archive_iter = new_file_archive_iter(BufReader::new(File::open(mod_archive_path)?))?;
 
 		let mut buffer = Vec::default();
