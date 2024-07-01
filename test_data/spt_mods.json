@@ -45,5 +45,13 @@
   {
     "url": "https://hub.sp-tarkov.com/files/file/771-custom-raid-times/",
     "version": "1.6.0"
+  },
+  {
+    "url": "https://github.com/project-fika/Fika-Server/releases/",
+    "github_pattern": "fika-server"
+  },
+  {
+    "url": "https://github.com/project-fika/Fika-Plugin/releases",
+    "github_pattern": "Fika.Release"
   }
 ]
