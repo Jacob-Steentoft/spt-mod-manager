@@ -45,7 +45,8 @@ enum Commands {
 	Restore {
 		restore_from: String,
 	},
-	Cleanup,
+	CleanCache,
+	RemoveMods,
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
@@ -84,7 +85,8 @@ async fn main() -> Result<()> {
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
-		Commands::Cleanup => cleanup(&mut remote_access)?,
+		Commands::CleanCache => cleanup(&mut remote_access)?,
+		Commands::RemoveMods => remove_mods(&spt_access)?,
 	}
 
 	Ok(())
@@ -108,7 +110,7 @@ async fn update(
 	};
 	println!("Found mod config at: {mod_cfg_file}");
 
-	for mod_cfg in mod_cfg {
+	for mod_cfg in mod_cfg.mods {
 		let mod_url = mod_cfg.url;
 
 		let mod_kind = match ModKind::parse(&mod_url, mod_cfg.github_pattern, mod_cfg.github_filter)
@@ -190,12 +192,16 @@ async fn update(
 	Ok(())
 }
 
+fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()>{
+	spt_access.remove_all_mods()
+}
+
 fn restore(spt_access: &SptAccess<Time>, restore_from: &str) -> Result<()> {
 	let bar = ProgressBar::new_spinner();
 	bar.enable_steady_tick(Duration::from_millis(100));
 	bar.set_message("Restoring mods and configurations");
 	spt_access.restore_from(restore_from)?;
-	bar.finish_with_message(format!("Backed up mods to: {restore_from}"));
+	bar.finish_with_message(format!("Restored your files from: {restore_from}"));
 	Ok(())
 }
 
@@ -204,7 +210,7 @@ fn backup(spt_access: &SptAccess<Time>, backup_to_path: &str) -> Result<()> {
 	bar.enable_steady_tick(Duration::from_millis(100));
 	bar.set_message("Backing up mods and configurations");
 	spt_access.backup_to(backup_to_path)?;
-	bar.finish_with_message(format!("Restored your files from: {backup_to_path}"));
+	bar.finish_with_message(format!("Backed up mods to: {backup_to_path}"));
 	Ok(())
 }
 

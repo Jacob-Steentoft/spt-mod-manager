@@ -8,6 +8,12 @@ use versions::Versioning;
 
 #[derive(PartialEq, Debug)]
 pub struct ModConfiguration {
+	pub spt_version: Versioning,
+	pub mods: Vec<ModVersionConfiguration>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct ModVersionConfiguration {
 	pub url: String,
 	pub version: Option<Versioning>,
 	pub github_pattern: Option<String>,
@@ -17,6 +23,12 @@ pub struct ModConfiguration {
 
 #[derive(Deserialize, Serialize)]
 struct ModConfigurationRaw {
+	#[serde(deserialize_with = "Versioning::deserialize_pretty")]
+	spt_version: Versioning,
+	mods: Vec<ModVersionConfigurationRaw>,
+}
+#[derive(Deserialize, Serialize)]
+struct ModVersionConfigurationRaw {
 	url: String,
 	version: Option<String>,
 	github_pattern: Option<String>,
@@ -24,10 +36,10 @@ struct ModConfigurationRaw {
 	github_filter: Option<String>,
 }
 
-impl TryFrom<ModConfigurationRaw> for ModConfiguration {
+impl TryFrom<ModVersionConfigurationRaw> for ModVersionConfiguration {
 	type Error = anyhow::Error;
 
-	fn try_from(value: ModConfigurationRaw) -> std::result::Result<Self, Self::Error> {
+	fn try_from(value: ModVersionConfigurationRaw) -> std::result::Result<Self, Self::Error> {
 		let version = if let Some(version) = value.version {
 			Some(Versioning::try_from(version.as_str())?)
 		} else {
@@ -53,21 +65,24 @@ impl ConfigurationAccess {
 	pub fn get_mods_from_path<P: AsRef<Path>>(
 		&self,
 		mod_cfg_path: P,
-	) -> Result<Option<Vec<ModConfiguration>>> {
+	) -> Result<Option<ModConfiguration>> {
 		let path = mod_cfg_path.as_ref();
 		if !path.is_file() {
 			return Ok(None);
 		}
 
 		let reader = BufReader::new(File::open(path)?);
-		let raw_cfgs: Vec<ModConfigurationRaw> = serde_json::from_reader(reader)?;
+		let raw_cfgs: ModConfigurationRaw = serde_json::from_reader(reader)?;
 
-		let mut cfgs = Vec::new();
-		for x in raw_cfgs {
-			cfgs.push(ModConfiguration::try_from(x)?)
+		let mut mods = Vec::new();
+		for x in raw_cfgs.mods {
+			mods.push(ModVersionConfiguration::try_from(x)?)
 		}
-
-		Ok(Some(cfgs))
+		
+		Ok(Some(ModConfiguration {
+			mods,
+			spt_version: raw_cfgs.spt_version
+		}))
 	}
 }
 
@@ -82,13 +97,17 @@ mod tests {
 		let path = "./test_data/cfg_mods.json";
 		let option = ConfigurationAccess::new().get_mods_from_path(path).unwrap();
 
-		let vec1 = vec![ModConfiguration {
-			url: "https://github.com/test/mactest/".to_string(),
-			version: None,
-			github_pattern: None,
-			install_path: None,
-			github_filter: None,
-		}];
-		assert_eq!(option, Some(vec1));
+		let cfg = ModConfiguration{
+			mods: vec![ModVersionConfiguration {
+				url: "https://github.com/test/mactest/".to_string(),
+				version: None,
+				github_pattern: None,
+				install_path: None,
+				github_filter: None,
+			}],
+			spt_version: Versioning::Ideal("3.8.3".parse().unwrap())
+		}
+		 ;
+		assert_eq!(option, Some(cfg));
 	}
 }

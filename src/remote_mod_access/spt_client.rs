@@ -30,7 +30,7 @@ enum DownloadLink{
 
 impl SptClient {
 	pub fn new(client: Client) -> Self {
-		Self { client, last_request: Instant::now(), request_delay: Duration::from_millis(500) }
+		Self { client, last_request: Instant::now(), request_delay: Duration::from_millis(1000) }
 	}
 
 	pub async fn get_latest_version(&mut self, spt_link: SptLink) -> Result<ModDownloadVersion> {

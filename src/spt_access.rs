@@ -1,6 +1,7 @@
 mod zip_data;
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -46,10 +47,11 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index)?;
 		}
+		let root_path = root_path.as_ref();
 		Ok(Self {
-			server_mods_path: path.join("user/mods/"),
-			client_mods_path: path.join("BepInEx/plugins/"),
-			root_path: PathBuf::from(root_path.as_ref()),
+			server_mods_path: root_path.join("user/mods/"),
+			client_mods_path: root_path.join("BepInEx/plugins/"),
+			root_path: PathBuf::from(root_path),
 			time,
 			install_index,
 		})
@@ -175,6 +177,40 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		let mut zip_archive = ZipArchive::new(File::open(archive_path)?)?;
 
 		zip_archive.extract(&self.root_path)?;
+		Ok(())
+	}
+	
+	pub fn remove_all_mods(&self) -> Result<()>{
+		let entries = fs::read_dir(&self.server_mods_path)?;
+		for entry in entries {
+			let path = entry?.path();
+			if path.is_file() {
+				continue
+			}
+			fs::remove_dir_all(&path)?;
+			println!("Deleted: {}", path.display());
+		}
+		let entries = fs::read_dir(&self.client_mods_path)?;
+		for entry in entries {
+			let path = entry?.path();
+			if path.file_name() == Some(OsStr::new("spt")) {
+				continue
+			}
+			if path.is_file() {
+				fs::remove_file(&path)?;
+				println!("Deleted: {}", path.display());
+				continue
+			}
+			
+			fs::remove_dir_all(&path)?;
+			println!("Deleted: {}", path.display());
+		}
+		let entries = fs::read_dir(&self.install_index)?;
+		for entry in entries {
+			let path = entry?.path();
+			fs::remove_file(&path)?;
+			println!("Deleted: {}", path.display());
+		}
 		Ok(())
 	}
 
