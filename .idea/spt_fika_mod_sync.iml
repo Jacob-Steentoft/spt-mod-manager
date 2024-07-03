@@ -2,7 +2,11 @@
 <module type="EMPTY_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/spt_manager/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sptmm_console/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sptmm_console/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/spt_manager/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sptmm_console/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

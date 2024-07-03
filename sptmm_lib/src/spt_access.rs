@@ -19,6 +19,8 @@ use winnow::{dispatch, PResult};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
+const SERVER_FILE_NAME: &str = "Aki.Server.exe";
+
 #[derive(Clone)]
 enum FileType {
 	Unknown,
@@ -42,12 +44,15 @@ pub struct SptAccess<Time: TimeProvider> {
 
 impl<Time: TimeProvider> SptAccess<Time> {
 	pub fn init<P: AsRef<Path>>(root_path: P, cache_path: P, time: Time) -> Result<Self> {
+		let root_path = root_path.as_ref();
+		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() {
+			return Err(anyhow!("Could not find {SERVER_FILE_NAME} in the current folder"));
+		}
 		let path = cache_path.as_ref();
 		let install_index = path.join("install_hash");
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index)?;
 		}
-		let root_path = root_path.as_ref();
 		Ok(Self {
 			server_mods_path: root_path.join("user/mods/"),
 			client_mods_path: root_path.join("BepInEx/plugins/"),

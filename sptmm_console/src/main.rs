@@ -1,24 +1,15 @@
 use std::borrow::Cow;
 use std::fs;
-use std::path::Path;
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
+use sptmm_lib::configuration_access::ConfigurationAccess;
+use sptmm_lib::remote_mod_access::{ModKind, RemoteModAccess};
+use sptmm_lib::spt_access::{InstallTarget, SptAccess};
+use sptmm_lib::time_access::Time;
 
-use crate::configuration_access::ConfigurationAccess;
-use crate::remote_mod_access::{ModKind, RemoteModAccess};
-use crate::spt_access::{InstallTarget, SptAccess};
-use crate::time_access::Time;
-
-mod configuration_access;
-mod remote_mod_access;
-mod shared_traits;
-mod spt_access;
-mod time_access;
-
-const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 const TEMP_PATH: &str = "./sptmm_tmp";
 
 #[derive(Debug, Parser)]
@@ -57,10 +48,6 @@ enum UpdateTarget {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-	if !Path::new(&format!("./{SERVER_FILE_NAME}")).exists() {
-		eprintln!("ERROR: Could not find {SERVER_FILE_NAME} in the current folder");
-		return Ok(());
-	}
 	let args = Cli::parse();
 
 	fs::create_dir_all(TEMP_PATH)?;

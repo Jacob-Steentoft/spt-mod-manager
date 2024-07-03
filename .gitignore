@@ -1,9 +1,8 @@
 /target
-/Aki.Server.exe
-/tmp
-/user
-/BepInEx
-/sptmm_tmp
-/spt_mods.json
-/test_output/
+sptmm_console/Aki.Server.exe
+sptmm_console/user
+sptmm_console/BepInEx
+sptmm_console/sptmm_tmp
+sptmm_console/spt_mods.json
+sptmm_console/test_output/
 /.idea/git_toolbox*

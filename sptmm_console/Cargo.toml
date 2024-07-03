@@ -1,0 +1,11 @@
+[package]
+name = "sptmm_console"
+version = "0.7.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+sptmm_lib = {path = "../sptmm_lib"}
+clap = { version = "4.5.7", features = ["derive"] }
+tokio = { version =  "1.38.0", features = ["rt", "macros", "rt-multi-thread"] }
+indicatif = "0.17.8"
