@@ -13,7 +13,7 @@ use winnow::token::{take, take_until};
 use crate::remote_mod_access::{html_parsers, ModDownloadVersion};
 use crate::remote_mod_access::html_parsers::SptMod;
 
-pub struct SptClient {
+pub struct SptModRepository {
 	client: Client,
 	last_request: Instant,
 	request_delay: Duration,
@@ -28,7 +28,7 @@ enum DownloadLink{
 	Unknown,
 }
 
-impl SptClient {
+impl SptModRepository {
 	pub fn new(client: Client) -> Self {
 		Self { client, last_request: Instant::now(), request_delay: Duration::from_millis(1000) }
 	}
@@ -212,7 +212,7 @@ mod tests {
 	#[tokio::test]
 	#[ignore]
 	async fn it_works() {
-		let mut client = SptClient::new(Client::new());
+		let mut client = SptModRepository::new(Client::new());
 		let spt_mod =
 			SptLink::parse("https://hub.sp-tarkov.com/files/file/1963-better-keys-updated/")
 				.unwrap();

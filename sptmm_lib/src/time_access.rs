@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use crate::shared_traits::TimeProvider;
 
+#[derive(Debug, Default)]
 pub struct Time {}
 
 impl Time {

@@ -34,6 +34,7 @@ pub enum InstallTarget {
 	Client,
 }
 
+#[derive(Debug)]
 pub struct SptAccess<Time: TimeProvider> {
 	server_mods_path: PathBuf,
 	client_mods_path: PathBuf,

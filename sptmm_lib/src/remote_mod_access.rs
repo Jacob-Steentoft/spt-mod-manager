@@ -8,16 +8,16 @@ use std::cmp::Ordering;
 use std::ffi::OsStr;
 use versions::Versioning;
 
-use crate::remote_mod_access::github_client::{GitHubLink, GithubClient};
+use crate::remote_mod_access::github_mod_repository::{GitHubLink, GithubModRepository};
 use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
-use crate::remote_mod_access::spt_client::{SptClient, SptLink};
+use crate::remote_mod_access::spt_mod_repository::{SptModRepository, SptLink};
 use crate::shared_traits::{ModName, ModVersion};
 
 pub mod cache_mod_access;
-mod github_client;
+mod github_mod_repository;
 mod html_parsers;
 mod mod_version_downloader;
-mod spt_client;
+mod spt_mod_repository;
 
 pub enum ModKind {
 	GitHub(GitHubLink),
@@ -70,23 +70,23 @@ impl ModVersion for ModDownloadVersion {
 }
 
 pub struct RemoteModAccess {
-	spt_client: SptClient,
+	spt_client: SptModRepository,
 	reqwest: Client,
-	github: GithubClient,
+	github: GithubModRepository,
 	cache_mod_access: CacheModAccess,
 }
 
 impl RemoteModAccess {
-	pub fn setup(path: impl AsRef<OsStr>) -> Result<Self> {
+	pub async fn setup(path: impl AsRef<OsStr>) -> Result<Self> {
 		let client = ClientBuilder::new()
 			.user_agent("spt_mod_manager_rs")
 			.build()
 			.unwrap();
 		Ok(Self {
 			reqwest: client.clone(),
-			spt_client: SptClient::new(client),
-			github: GithubClient::new(),
-			cache_mod_access: CacheModAccess::build(path)?,
+			spt_client: SptModRepository::new(client),
+			github: GithubModRepository::new(),
+			cache_mod_access: CacheModAccess::build(path).await?,
 		})
 	}
 
@@ -144,7 +144,7 @@ impl RemoteModAccess {
 		Ok(Some(cached_mod))
 	}
 
-	pub fn remove_cache(&mut self) -> Result<()> {
-		self.cache_mod_access.remove_cache()
+	pub async fn remove_cache(&mut self) -> Result<()> {
+		self.cache_mod_access.remove_cache().await
 	}
 }

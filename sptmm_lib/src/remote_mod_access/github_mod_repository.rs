@@ -33,11 +33,11 @@ impl GitHubLink {
 	}
 }
 
-pub struct GithubClient {
+pub struct GithubModRepository {
 	octo: Octocrab,
 }
 
-impl GithubClient {
+impl GithubModRepository {
 	pub fn new() -> Self {
 		Self {
 			octo: Octocrab::default(),

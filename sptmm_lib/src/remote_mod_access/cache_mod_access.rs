@@ -1,13 +1,12 @@
 use std::cmp::Ordering;
 use std::ffi::OsStr;
-use std::fs;
-use std::fs::File;
-use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
-use tokio::pin;
+use tokio::{fs, pin};
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use versions::Versioning;
 use winnow::combinator::separated;
 use winnow::prelude::*;
@@ -38,8 +37,8 @@ impl CacheFile {
 	fn is_manifest(&self) -> bool {
 		self.file_ext.as_ref().is_some_and(|s| s == ".manifest")
 	}
-	fn delete(self) -> Result<()> {
-		fs::remove_file(self.path)?;
+	async fn delete(self) -> Result<()> {
+		fs::remove_file(self.path).await?;
 		Ok(())
 	}
 }
@@ -52,10 +51,10 @@ pub enum ModCacheStatus {
 }
 
 impl CacheModAccess {
-	pub fn build<S: AsRef<OsStr>>(cache_path: S) -> Result<Self> {
+	pub async fn build<S: AsRef<OsStr>>(cache_path: S) -> Result<Self> {
 		let cache_dir = PathBuf::from(&cache_path).join("remote_cache");
-		fs::create_dir_all(&cache_dir)?;
-		let cached_mods = calculate_cache(&cache_dir)?;
+		fs::create_dir_all(&cache_dir).await?;
+		let cached_mods = calculate_cache(&cache_dir).await?;
 		Ok(Self {
 			cache_dir,
 			cached_mods,
@@ -91,25 +90,25 @@ impl CacheModAccess {
 	}
 
 	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<&CachedModVersion> {
-		let mod_path = self.ensure_mod_folder(downloader)?;
+		let mod_path = self.ensure_mod_folder(downloader).await?;
 
 		let mod_file_name = to_file_name(downloader);
 		let mod_file_path = mod_path.join(Path::new(&mod_file_name));
 		let manifest_path = ModManifest::create_manifest_path(mod_path, &mod_file_name)?;
 
-		let mut writer = BufWriter::new(File::create(&mod_file_path)?);
+		let mut writer = BufWriter::new(File::create(&mod_file_path).await?);
 		let stream = downloader.download().await?;
 		pin!(stream);
 		while let Some(item) = stream.next().await {
 			let item = item?;
-			writer.write_all(item.as_ref())?;
+			writer.write_all(item.as_ref()).await?;
 		}
 		
-		let writer = BufWriter::new(File::create(manifest_path)?);
+		let mut file = File::create(manifest_path).await?;
 		let manifest: ModManifest = downloader.into();
-		serde_json::to_writer(writer, &manifest)?;
-
-		self.cached_mods = calculate_cache(&self.cache_dir)?;
+		let buffer = serde_json::to_vec(&manifest)?;
+		file.write_all(&buffer).await?;
+		self.cached_mods = calculate_cache(&self.cache_dir).await?;
 
 		let version = self.cached_mods
 			.iter()
@@ -119,42 +118,41 @@ impl CacheModAccess {
 		Ok(version)
 	}
 	
-	pub fn remove_cache(&mut self) -> Result<()>{
-		for entry in fs::read_dir(&self.cache_dir)? {
-			let path = entry?.path();
+	pub async fn remove_cache(&mut self) -> Result<()>{
+		while let Some(entry) = fs::read_dir(&self.cache_dir).await?.next_entry().await? {
+			let path = entry.path();
 			if path.is_dir() {
-				fs::remove_dir_all(path)?;
+				fs::remove_dir_all(path).await?;
 			}
 			else if path.is_file() {
-				fs::remove_file(path)?
+				fs::remove_file(path).await?
 			}
 		}
 		
-		self.cached_mods = calculate_cache(&self.cache_dir)?;
+		self.cached_mods = calculate_cache(&self.cache_dir).await?;
 		Ok(())
 	}
 
-	fn ensure_mod_folder<MN: ModName>(&self, mod_name: &MN) -> Result<PathBuf> {
+	async fn ensure_mod_folder<MN: ModName>(&self, mod_name: &MN) -> Result<PathBuf> {
 		let mod_folder_name = mod_name.to_file_name();
 		let mod_path = self.cache_dir.join(mod_folder_name);
 		if !mod_path.is_dir() {
-			fs::create_dir(&mod_path)?;
+			fs::create_dir(&mod_path).await?;
 		}
 		Ok(mod_path)
 	}
 }
 
-fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>> {
+async fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>> {
 	let mut cached_mods = Vec::new();
-	for entry in fs::read_dir(cache_path)? {
-		let entry = entry?;
+	while let Some(entry) = fs::read_dir(&cache_path).await?.next_entry().await? {
 		let path = entry.path();
 		if !path.is_dir() {
 			continue;
 		}
 
-		let cached_files = get_all_files(&path)?;
-		let versions = clean_unmanaged_files_and_build_cache(cached_files)?;
+		let cached_files = get_all_files(&path).await?;
+		let versions = clean_unmanaged_files_and_build_cache(cached_files).await?;
 		if versions.is_empty() {
 			continue;
 		}
@@ -167,7 +165,7 @@ fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>> {
 	Ok(cached_mods)
 }
 
-fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Result<Vec<CachedModVersion>> {
+async fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Result<Vec<CachedModVersion>> {
 	let mut to_keep = Vec::new();
 	let mut cached_mods = Vec::new();
 	for cached_file in vec.iter() {
@@ -182,8 +180,10 @@ fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Result<Vec<
 			continue;
 		};
 
-		let file = File::open(&cached_file.path)?;
-		let Ok(manifest) = serde_json::from_reader(BufReader::new(file)) else {
+		let mut file = File::open(&cached_file.path).await?;
+		let mut buffer = Vec::new();
+		file.read_to_end(&mut buffer).await?;
+		let Ok(manifest) = serde_json::from_slice(&buffer) else {
 			eprintln!("Failed to parse: {}", cached_file.path.to_string_lossy());
 			continue;
 		};
@@ -198,16 +198,15 @@ fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Result<Vec<
 	}
 	while let Some(remove_index) = vec.iter().position(|cf| !to_keep.contains(&cf.path)) {
 		let file = vec.swap_remove(remove_index);
-		file.delete()?
+		file.delete().await?
 	}
 
 	Ok(cached_mods)
 }
 
-fn get_all_files(folder_path: &PathBuf) -> Result<Vec<CacheFile>> {
+async fn get_all_files(folder_path: &PathBuf) -> Result<Vec<CacheFile>> {
 	let mut vec = Vec::new();
-	for read in fs::read_dir(folder_path)? {
-		let entry = read?;
+	while let Some(entry) = fs::read_dir(&folder_path).await?.next_entry().await? {
 		let string = entry.file_name();
 		let (file_name, file_ext) =
 			separate_file_and_ext(string.to_str().context("Found no filename")?)

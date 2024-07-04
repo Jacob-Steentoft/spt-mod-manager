@@ -26,7 +26,6 @@ enum Commands {
 	Update {
 		#[arg(required = true)]
 		target: UpdateTarget,
-		configuration_path: Option<String>,
 	},
 	#[command(arg_required_else_help = true)]
 	Backup {
@@ -51,36 +50,35 @@ async fn main() -> Result<()> {
 	let args = Cli::parse();
 
 	fs::create_dir_all(TEMP_PATH)?;
+	let root_path = "./";
 
-	let mut remote_access = RemoteModAccess::setup(TEMP_PATH)?;
-	let cfg_access = ConfigurationAccess::new();
-	let spt_access = SptAccess::init("./", TEMP_PATH, Time::new())?;
+	let mut remote_access = RemoteModAccess::setup(TEMP_PATH).await?;
+	let cfg_access = ConfigurationAccess::setup(root_path).await?;
+	let spt_access = SptAccess::init(root_path, TEMP_PATH, Time::new())?;
 
 	match args.command {
 		Commands::Update {
-			target,
-			configuration_path,
+			target
 		} => {
 			update(
 				&mut remote_access,
 				&cfg_access,
 				&spt_access,
 				target,
-				configuration_path,
 			)
 			.await?
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
-		Commands::CleanCache => cleanup(&mut remote_access)?,
+		Commands::CleanCache => cleanup(&mut remote_access).await?,
 		Commands::RemoveMods => remove_mods(&spt_access)?,
 	}
 
 	Ok(())
 }
 
-fn cleanup(cache_access: &mut RemoteModAccess) -> Result<()> {
-	cache_access.remove_cache()
+async fn cleanup(cache_access: &mut RemoteModAccess) -> Result<()> {
+	cache_access.remove_cache().await
 }
 
 async fn update(
@@ -88,14 +86,8 @@ async fn update(
 	cfg_man: &ConfigurationAccess,
 	spt_access: &SptAccess<Time>,
 	target: UpdateTarget,
-	configuration_path: Option<String>,
 ) -> Result<()> {
-	let mod_cfg_file = configuration_path.unwrap_or("./spt_mods.json".to_string());
-	let Some(mod_cfg) = cfg_man.get_mods_from_path(&mod_cfg_file)? else {
-		println!("Found no mod config at: {mod_cfg_file}");
-		return Ok(());
-	};
-	println!("Found mod config at: {mod_cfg_file}");
+	let mod_cfg = cfg_man.read_remote_mods().await?;
 
 	for mod_cfg in mod_cfg.mods {
 		let mod_url = mod_cfg.url;

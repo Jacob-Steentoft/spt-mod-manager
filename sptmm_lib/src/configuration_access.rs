@@ -1,9 +1,9 @@
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncReadExt;
 use versions::Versioning;
 
 #[derive(PartialEq, Debug)]
@@ -56,33 +56,38 @@ impl TryFrom<ModVersionConfigurationRaw> for ModVersionConfiguration {
 	}
 }
 
-pub struct ConfigurationAccess {}
+
+pub struct ConfigurationAccess {
+	mod_cfg_path: PathBuf,
+}
 
 impl ConfigurationAccess {
-	pub fn new() -> Self {
-		Self {}
-	}
-	pub fn get_mods_from_path<P: AsRef<Path>>(
-		&self,
-		mod_cfg_path: P,
-	) -> Result<Option<ModConfiguration>> {
-		let path = mod_cfg_path.as_ref();
-		if !path.is_file() {
-			return Ok(None);
+	pub async fn setup<P: AsRef<Path>>(path: P) -> Result<Self> {
+		let root_path = path.as_ref();
+		if !root_path.is_dir() {
+			return Err(anyhow!("Root folder must be a directory"))
 		}
+		let mod_cfg_path = root_path.join("spt_mods.json");
 
-		let reader = BufReader::new(File::open(path)?);
-		let raw_cfgs: ModConfigurationRaw = serde_json::from_reader(reader)?;
+		Ok(Self {
+			mod_cfg_path
+		})
+	}
+	pub async fn read_remote_mods(&self) -> Result<ModConfiguration> {
+		let mut buffer = Vec::new();
+		OpenOptions::new().read(true).open(&self.mod_cfg_path).await?.read_to_end(&mut buffer).await?;
+		
+		let raw_cfgs: ModConfigurationRaw = serde_json::from_slice(&buffer)?;
 
 		let mut mods = Vec::new();
 		for x in raw_cfgs.mods {
 			mods.push(ModVersionConfiguration::try_from(x)?)
 		}
 		
-		Ok(Some(ModConfiguration {
+		Ok(ModConfiguration {
 			mods,
 			spt_version: raw_cfgs.spt_version
-		}))
+		})
 	}
 }
 
@@ -92,10 +97,9 @@ mod tests {
 
 	//TODO: More tests please :)
 
-	#[test]
-	fn integration_test_get_mods_from_path() {
-		let path = "./test_data/cfg_mods.json";
-		let option = ConfigurationAccess::new().get_mods_from_path(path).unwrap();
+	#[tokio::test]
+	async fn integration_test_get_mods_from_path() {
+		let option = ConfigurationAccess::setup("./test_data/").await.unwrap().read_remote_mods().await.unwrap();
 
 		let cfg = ModConfiguration{
 			mods: vec![ModVersionConfiguration {
@@ -108,6 +112,6 @@ mod tests {
 			spt_version: Versioning::Ideal("3.8.3".parse().unwrap())
 		}
 		 ;
-		assert_eq!(option, Some(cfg));
+		assert_eq!(option, cfg);
 	}
 }
