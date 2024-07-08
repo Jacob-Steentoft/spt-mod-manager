@@ -2,14 +2,15 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use reqwest::Url;
-use scraper::selector::CssLocalName;
 use scraper::{CaseSensitivity, Element, Html, Selector};
+use scraper::selector::CssLocalName;
 use versions::Versioning;
 use winnow::prelude::*;
+use winnow::PResult;
 use winnow::stream::AsChar;
 use winnow::token::take_till;
-use winnow::PResult;
 
+#[derive(Debug)]
 pub(super) struct SptMod {
 	pub title: String,
 	pub versions: Vec<SptModVersion>,
@@ -130,9 +131,7 @@ pub fn google_parse_download(document: &str) -> Result<(Url, String)> {
 
 pub fn parse_version(version: &str) -> PResult<Option<Versioning>> {
 	let (remainder, _) = take_till(0.., AsChar::is_dec_digit).parse_peek(version)?;
-	let version = Versioning::parse(remainder)
-		.ok()
-		.map(|(_, version)| version);
+	let version= Versioning::new(remainder).or(Versioning::parse(remainder).ok().map(|(_, version)| version));
 	Ok(version)
 }
 

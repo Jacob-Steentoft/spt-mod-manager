@@ -47,7 +47,7 @@ enum UpdateTarget {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
 	let args = Cli::parse();
-	
+
 	let root_path = "./";
 	let project_access = ProjectAccess::new().map_err(|e| anyhow!(e))?;
 	let mut remote_access = RemoteModAccess::init(&project_access).await?;
@@ -55,16 +55,8 @@ async fn main() -> Result<()> {
 	let spt_access = SptAccess::init(root_path, &project_access, Time::new())?;
 
 	match args.command {
-		Commands::Update {
-			target
-		} => {
-			update(
-				&mut remote_access,
-				&cfg_access,
-				&spt_access,
-				target,
-			)
-			.await?
+		Commands::Update { target } => {
+			update(&mut remote_access, &cfg_access, &spt_access, target).await?
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
@@ -109,7 +101,10 @@ async fn update(
 				match result {
 					Ok(mod_version) => mod_version,
 					Err(err) => {
-						fail_with_error(bar, format!("Failed storing mod '{mod_url}' with error: {err}"));
+						fail_with_error(
+							bar,
+							format!("Failed storing mod '{mod_url}' with error: {err}"),
+						);
 						continue;
 					}
 				}
@@ -123,7 +118,10 @@ async fn update(
 				{
 					Ok(mod_version) => mod_version,
 					Err(err) => {
-						fail_with_error(bar, format!("Failed to find versions for '{mod_url}' with error: {err}"));
+						fail_with_error(
+							bar,
+							format!("Failed to find versions for '{mod_url}' with error: {err}"),
+						);
 						continue;
 					}
 				};
@@ -138,7 +136,7 @@ async fn update(
 				cached_mod
 			}
 		};
-		
+
 		if let Some(install_path) = mod_cfg.install_path {
 			spt_access.install_mod_to_path(&cached_mod.path, install_path)?;
 		} else {
@@ -146,9 +144,14 @@ async fn update(
 				UpdateTarget::Client => InstallTarget::Client,
 				UpdateTarget::Server => InstallTarget::Server,
 			};
-			if spt_access.is_same_installed_version(&cached_mod.path, &cached_mod, install_target)? {
+			if spt_access.is_same_installed_version(
+				&cached_mod.path,
+				&cached_mod,
+				install_target,
+			)? {
 				bar.finish_with_message(format!(
-					"Version {} has already been installed for: {mod_url}", cached_mod.get_version()
+					"Version {} has already been installed for: {mod_url}",
+					cached_mod.get_version()
 				));
 				continue;
 			}
@@ -156,7 +159,8 @@ async fn update(
 			match spt_access.install_mod(&cached_mod.path, &cached_mod, install_target) {
 				Ok(_) => {
 					bar.finish_with_message(format!(
-						"Installed version {} for: {mod_url}", cached_mod.get_version()
+						"Installed version {} for: {mod_url}",
+						cached_mod.get_version()
 					));
 				}
 				Err(err) => fail_with_error(
@@ -169,7 +173,7 @@ async fn update(
 	Ok(())
 }
 
-fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()>{
+fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()> {
 	spt_access.remove_all_mods()
 }
 
