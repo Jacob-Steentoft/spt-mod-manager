@@ -311,7 +311,8 @@ mod tests {
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
 		let path = "./test_output/restore_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path, path, provider)
+		let project = ProjectAccess::from(path).unwrap();
+		SptAccess::init(path, &project, provider)
 			.unwrap()
 			.restore_from(buf)
 			.unwrap();
@@ -329,7 +330,8 @@ mod tests {
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
 		let path = "./test_output/install_test";
 		fs::create_dir_all(path).unwrap();
-		SptAccess::init(path, path, provider)
+		let project = ProjectAccess::from(path).unwrap();
+		SptAccess::init(path, &project, provider)
 			.unwrap()
 			.install_mod(buf, &TestModName("Test".to_string()), InstallTarget::Client)
 			.unwrap();
@@ -346,7 +348,9 @@ mod tests {
 		let _discard = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).unwrap();
 		let path1 = "./test_data/backed_up_data";
-		SptAccess::init(path1, path1, provider)
+		let project = ProjectAccess::from(path1).unwrap();
+
+		SptAccess::init(path1, &project, provider)
 			.unwrap()
 			.backup_to(&path)
 			.unwrap();
