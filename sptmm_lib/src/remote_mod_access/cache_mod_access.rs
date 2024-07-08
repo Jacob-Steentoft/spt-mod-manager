@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
@@ -12,7 +11,7 @@ use winnow::combinator::separated;
 use winnow::prelude::*;
 use winnow::PResult;
 use winnow::token::take_until;
-
+use crate::cache_access::ProjectAccess;
 use crate::remote_mod_access::cache_mod_access::cached_mod::CachedMod;
 pub use crate::remote_mod_access::cache_mod_access::cached_mod_version::CachedModVersion;
 use crate::remote_mod_access::cache_mod_access::mod_manifest::ModManifest;
@@ -51,8 +50,8 @@ pub enum ModCacheStatus {
 }
 
 impl CacheModAccess {
-	pub async fn build<S: AsRef<OsStr>>(cache_path: S) -> Result<Self> {
-		let cache_dir = PathBuf::from(&cache_path).join("remote_cache");
+	pub async fn init(project: &ProjectAccess) -> Result<Self> {
+		let cache_dir = project.cache_root().join("remote");
 		fs::create_dir_all(&cache_dir).await?;
 		let cached_mods = calculate_cache(&cache_dir).await?;
 		Ok(Self {

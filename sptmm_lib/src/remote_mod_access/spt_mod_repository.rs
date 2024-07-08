@@ -139,6 +139,8 @@ pub struct SptLink {
 	link: Url,
 }
 
+pub const SPT_DOMAIN: &str = "https://hub.sp-tarkov.com";
+
 impl SptLink {
 	pub fn parse<S: AsRef<str>>(url: S) -> Result<Self> {
 		let url = url.as_ref();
@@ -159,7 +161,7 @@ impl SptLink {
 	}
 	
 	pub fn starts_with_host<S: AsRef<str>>(url: S) -> bool{
-		url.as_ref().starts_with("https://hub.sp-tarkov.com")
+		url.as_ref().starts_with(SPT_DOMAIN)
 	}
 }
 

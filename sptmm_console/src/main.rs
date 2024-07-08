@@ -1,16 +1,14 @@
 use std::borrow::Cow;
-use std::fs;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
+use sptmm_lib::cache_access::ProjectAccess;
 use sptmm_lib::configuration_access::ConfigurationAccess;
 use sptmm_lib::remote_mod_access::{ModKind, RemoteModAccess};
 use sptmm_lib::spt_access::{InstallTarget, SptAccess};
 use sptmm_lib::time_access::Time;
-
-const TEMP_PATH: &str = "./sptmm_tmp";
 
 #[derive(Debug, Parser)]
 #[command(name = "spt mod manager")]
@@ -48,13 +46,12 @@ enum UpdateTarget {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
 	let args = Cli::parse();
-
-	fs::create_dir_all(TEMP_PATH)?;
+	
 	let root_path = "./";
-
-	let mut remote_access = RemoteModAccess::setup(TEMP_PATH).await?;
+	let project_access = ProjectAccess::new().map_err(|e| anyhow!(e))?;
+	let mut remote_access = RemoteModAccess::init(&project_access).await?;
 	let cfg_access = ConfigurationAccess::setup(root_path).await?;
-	let spt_access = SptAccess::init(root_path, TEMP_PATH, Time::new())?;
+	let spt_access = SptAccess::init(root_path, &project_access, Time::new())?;
 
 	match args.command {
 		Commands::Update {

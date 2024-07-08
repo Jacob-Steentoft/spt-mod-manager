@@ -5,12 +5,11 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
 use std::cmp::Ordering;
-use std::ffi::OsStr;
 use versions::Versioning;
-
-use crate::remote_mod_access::github_mod_repository::{GitHubLink, GithubModRepository};
+use crate::cache_access::ProjectAccess;
+use crate::remote_mod_access::github_mod_repository::{GITHUB_DOMAIN, GitHubLink, GithubModRepository};
 use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
-use crate::remote_mod_access::spt_mod_repository::{SptModRepository, SptLink};
+use crate::remote_mod_access::spt_mod_repository::{SptModRepository, SptLink, SPT_DOMAIN};
 use crate::shared_traits::{ModName, ModVersion};
 
 pub mod cache_mod_access;
@@ -18,6 +17,8 @@ mod github_mod_repository;
 mod html_parsers;
 mod mod_version_downloader;
 mod spt_mod_repository;
+
+const SUPPORTED_DOMAINS: &[&str] = &[GITHUB_DOMAIN, SPT_DOMAIN];
 
 pub enum ModKind {
 	GitHub(GitHubLink),
@@ -38,6 +39,10 @@ impl ModKind {
 			return Ok(Self::GitHub(GitHubLink::parse(url, pattern, gh_filter)?));
 		}
 		Err(anyhow!("Unsupported mod host: {}", url.as_ref()))
+	}
+	
+	pub fn get_supported_domains() -> &'static [&'static str]{
+		SUPPORTED_DOMAINS
 	}
 }
 
@@ -77,7 +82,7 @@ pub struct RemoteModAccess {
 }
 
 impl RemoteModAccess {
-	pub async fn setup(path: impl AsRef<OsStr>) -> Result<Self> {
+	pub async fn init(project: &ProjectAccess) -> Result<Self> {
 		let client = ClientBuilder::new()
 			.user_agent("spt_mod_manager_rs")
 			.build()
@@ -86,14 +91,14 @@ impl RemoteModAccess {
 			reqwest: client.clone(),
 			spt_client: SptModRepository::new(client),
 			github: GithubModRepository::new(),
-			cache_mod_access: CacheModAccess::build(path).await?,
+			cache_mod_access: CacheModAccess::init(project).await?,
 		})
 	}
 
 	pub async fn get_newest_release(&mut self, mod_entry: ModKind) -> Result<&CachedModVersion> {
 		// TODO: Handle rate limits
 		let mod_version = match mod_entry {
-			ModKind::GitHub(gh_mod) => self.github.get_newest_github_release(gh_mod).await?,
+			ModKind::GitHub(gh_mod) => self.github.get_latest_version(gh_mod).await?,
 			ModKind::SpTarkov(link) => self.spt_client.get_latest_version(link).await?,
 		};
 

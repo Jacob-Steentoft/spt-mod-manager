@@ -18,6 +18,7 @@ use winnow::token::take_until;
 use winnow::{dispatch, PResult};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
+use crate::cache_access::ProjectAccess;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -44,13 +45,12 @@ pub struct SptAccess<Time: TimeProvider> {
 }
 
 impl<Time: TimeProvider> SptAccess<Time> {
-	pub fn init<P: AsRef<Path>>(root_path: P, cache_path: P, time: Time) -> Result<Self> {
+	pub fn init<P: AsRef<Path>>(root_path: P, project: &ProjectAccess, time: Time) -> Result<Self> {
 		let root_path = root_path.as_ref();
 		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() {
 			return Err(anyhow!("Could not find {SERVER_FILE_NAME} in the current folder"));
 		}
-		let path = cache_path.as_ref();
-		let install_index = path.join("install_hash");
+		let install_index = project.cache_root().join("install_hash");
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index)?;
 		}
