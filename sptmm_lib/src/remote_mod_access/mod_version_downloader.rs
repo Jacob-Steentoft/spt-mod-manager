@@ -1,11 +1,11 @@
-use std::cmp::Ordering;
-use bytes::Bytes;
-use chrono::{DateTime, Utc};
-use futures_core::Stream;
-use reqwest::Client;
-use versions::Versioning;
 use crate::remote_mod_access::ModDownloadVersion;
 use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
+use anyhow::Result;
+use bytes::Bytes;
+use chrono::{DateTime, Utc};
+use reqwest::Client;
+use std::cmp::Ordering;
+use versions::Versioning;
 
 #[derive(Debug)]
 pub struct ModVersionDownloader {
@@ -14,13 +14,14 @@ pub struct ModVersionDownloader {
 }
 
 impl ModVersionDownload for ModVersionDownloader {
-	async fn download(&self) -> anyhow::Result<impl Stream<Item=reqwest::Result<Bytes>>> {
+	async fn download(&self) -> Result<Bytes> {
 		Ok(self
 			.reqwest
 			.get(self.mod_version.download_url.clone())
 			.send()
 			.await?
-			.bytes_stream())
+			.bytes()
+			.await?)
 	}
 
 	fn get_file_name(&self) -> &str {
@@ -33,10 +34,10 @@ impl ModVersionDownload for ModVersionDownloader {
 }
 
 impl ModVersionDownloader {
-	pub(super) fn new(mod_version: ModDownloadVersion, reqwest: &Client) -> Self{
+	pub(super) fn new(mod_version: ModDownloadVersion, reqwest: &Client) -> Self {
 		Self {
 			mod_version,
-			reqwest: reqwest.clone()
+			reqwest: reqwest.clone(),
 		}
 	}
 }

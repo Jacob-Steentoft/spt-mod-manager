@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use futures_core::Stream;
+use anyhow::Result;
 use mockall::automock;
 use versions::Versioning;
 
@@ -33,7 +33,7 @@ fn space_mapper(c: char) -> char {
 
 pub trait ModVersionDownload: ModVersion + Unpin {
 	#[allow(async_fn_in_trait)]
-	async fn download(&self) -> anyhow::Result<impl Stream<Item=reqwest::Result<Bytes>>>;
+	async fn download(&self) -> Result<Bytes>;
 	fn get_file_name(&self) -> &str;
 	fn get_upload_date(&self) -> DateTime<Utc>;
 }

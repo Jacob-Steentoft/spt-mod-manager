@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, ClientBuilder, Url};
 use std::cmp::Ordering;
+use serde::{Deserialize, Serialize};
 use versions::Versioning;
 use crate::cache_access::ProjectAccess;
 use crate::remote_mod_access::github_mod_repository::{GITHUB_DOMAIN, GitHubLink, GithubModRepository};
@@ -20,6 +21,7 @@ mod spt_mod_repository;
 
 const SUPPORTED_DOMAINS: &[&str] = &[GITHUB_DOMAIN, SPT_DOMAIN];
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum ModKind {
 	GitHub(GitHubLink),
 	SpTarkov(SptLink),
@@ -95,9 +97,9 @@ impl RemoteModAccess {
 		})
 	}
 
-	pub async fn get_newest_release(&mut self, mod_entry: ModKind) -> Result<&CachedModVersion> {
+	pub async fn get_newest_release(&mut self, mod_entry: ModKind) -> Result<CachedModVersion> {
 		// TODO: Handle rate limits
-		let mod_version = match mod_entry {
+		let mod_version = match mod_entry.clone() {
 			ModKind::GitHub(gh_mod) => self.github.get_latest_version(gh_mod).await?,
 			ModKind::SpTarkov(link) => self.spt_client.get_latest_version(link).await?,
 		};
@@ -105,25 +107,29 @@ impl RemoteModAccess {
 		let cached_mod = match self.cache_mod_access.get_status(&mod_version) {
 			ModCacheStatus::SameVersion | ModCacheStatus::NewerVersion => self
 				.cache_mod_access
-				.get_cached_mod(mod_version.get_version())
+				.get_cached_mod(&mod_version)
 				.context("Failed to find cached version")?,
 			ModCacheStatus::NotCached | ModCacheStatus::OlderVersion => {
 				self.cache_mod_access
-					.cache_mod(&ModVersionDownloader::new(mod_version, &self.reqwest))
+					.cache_mod(ModVersionDownloader::new(mod_version, &self.reqwest), mod_entry)
 					.await?
 			}
 		};
 
-		Ok(cached_mod)
+		Ok(cached_mod.clone())
 	}
 
 	pub async fn get_specific_version(
 		&mut self,
 		mod_kind: ModKind,
 		version: &Versioning,
-	) -> Result<Option<&CachedModVersion>> {
+	) -> Result<Option<CachedModVersion>> {
 		// TODO: Handle rate limits
-		let mod_version = match mod_kind {
+		if let Some(cached_mod) = self.cache_mod_access.get_cached_mod_from_kind(&mod_kind, version) {
+			return Ok(Some(cached_mod.clone()))
+		};
+		
+		let mod_version = match mod_kind.clone() {
 			ModKind::GitHub(gh_mod) => self.github.get_version(gh_mod, version).await?,
 			ModKind::SpTarkov(spt_mod) => self.spt_client.get_version(spt_mod, version).await?,
 		};
@@ -135,18 +141,18 @@ impl RemoteModAccess {
 		let cached_mod = match self.cache_mod_access.get_status(&mod_version) {
 			ModCacheStatus::SameVersion => self
 				.cache_mod_access
-				.get_cached_mod(mod_version.get_version())
+				.get_cached_mod(&mod_version)
 				.context("Failed to find cached version")?,
 			ModCacheStatus::NewerVersion
 			| ModCacheStatus::NotCached
 			| ModCacheStatus::OlderVersion => {
 				self.cache_mod_access
-					.cache_mod(&ModVersionDownloader::new(mod_version, &self.reqwest))
+					.cache_mod(ModVersionDownloader::new(mod_version, &self.reqwest), mod_kind)
 					.await?
 			}
 		};
 
-		Ok(Some(cached_mod))
+		Ok(Some(cached_mod.clone()))
 	}
 
 	pub async fn remove_cache(&mut self) -> Result<()> {

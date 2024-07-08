@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use tokio::time::{Instant, sleep_until};
 use url::Url;
 use versions::Versioning;
@@ -134,7 +135,7 @@ impl SptModRepository {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SptLink {
 	link: Url,
 }

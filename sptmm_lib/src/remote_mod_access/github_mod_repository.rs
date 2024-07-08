@@ -4,6 +4,7 @@ use octocrab::models::repos::{Asset, Release};
 use octocrab::Octocrab;
 use std::ops::Sub;
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
 use tokio::time::{sleep_until, Instant};
 use versions::Versioning;
 use winnow::combinator::opt;
@@ -13,6 +14,7 @@ use winnow::{PResult, Parser};
 
 use crate::remote_mod_access::ModDownloadVersion;
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct GitHubLink {
 	owner: String,
 	repo: String,
@@ -49,7 +51,7 @@ pub struct GithubModRepository {
 
 impl GithubModRepository {
 	pub fn new() -> Self {
-		let request_interval = Duration::from_secs(60);
+		let request_interval = Duration::from_secs(1);
 		Self {
 			octo: Octocrab::default(),
 			last_request: Instant::now().sub(request_interval),

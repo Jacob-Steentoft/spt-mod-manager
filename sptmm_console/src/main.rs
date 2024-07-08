@@ -7,6 +7,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use sptmm_lib::cache_access::ProjectAccess;
 use sptmm_lib::configuration_access::ConfigurationAccess;
 use sptmm_lib::remote_mod_access::{ModKind, RemoteModAccess};
+use sptmm_lib::shared_traits::ModVersion;
 use sptmm_lib::spt_access::{InstallTarget, SptAccess};
 use sptmm_lib::time_access::Time;
 
@@ -114,7 +115,7 @@ async fn update(
 				}
 			}
 			Some(version) => {
-				bar.set_message(format!("Finding version '{version}' online for: {mod_url}"));
+				bar.set_message(format!("Finding version '{version}' for: {mod_url}"));
 
 				let option = match remote_mod_access
 					.get_specific_version(mod_kind, &version)
@@ -137,8 +138,7 @@ async fn update(
 				cached_mod
 			}
 		};
-
-		bar.set_message(format!("Installing the newest version for: {mod_url}"));
+		
 		if let Some(install_path) = mod_cfg.install_path {
 			spt_access.install_mod_to_path(&cached_mod.path, install_path)?;
 		} else {
@@ -146,16 +146,17 @@ async fn update(
 				UpdateTarget::Client => InstallTarget::Client,
 				UpdateTarget::Server => InstallTarget::Server,
 			};
-			if spt_access.is_same_installed_version(&cached_mod.path, cached_mod, install_target)? {
+			if spt_access.is_same_installed_version(&cached_mod.path, &cached_mod, install_target)? {
 				bar.finish_with_message(format!(
-					"Newest version has already been installed for: {mod_url}"
+					"Version {} has already been installed for: {mod_url}", cached_mod.get_version()
 				));
 				continue;
 			}
-			match spt_access.install_mod(&cached_mod.path, cached_mod, install_target) {
+			bar.set_message(format!("Installing the newest version for: {mod_url}"));
+			match spt_access.install_mod(&cached_mod.path, &cached_mod, install_target) {
 				Ok(_) => {
 					bar.finish_with_message(format!(
-						"The newest version has been installed for: {mod_url}"
+						"Installed version {} for: {mod_url}", cached_mod.get_version()
 					));
 				}
 				Err(err) => fail_with_error(

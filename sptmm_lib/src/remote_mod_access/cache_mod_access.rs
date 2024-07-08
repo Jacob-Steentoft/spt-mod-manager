@@ -2,23 +2,24 @@ use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use futures_util::StreamExt;
-use tokio::{fs, pin};
+use tokio::fs;
 use tokio::fs::File;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use versions::Versioning;
 use winnow::combinator::separated;
 use winnow::prelude::*;
-use winnow::PResult;
 use winnow::token::take_until;
+use winnow::PResult;
+
 use crate::cache_access::ProjectAccess;
 use crate::remote_mod_access::cache_mod_access::cached_mod::CachedMod;
 pub use crate::remote_mod_access::cache_mod_access::cached_mod_version::CachedModVersion;
 use crate::remote_mod_access::cache_mod_access::mod_manifest::ModManifest;
+use crate::remote_mod_access::ModKind;
 use crate::shared_traits::{ModName, ModVersion, ModVersionDownload};
 
-mod cached_mod_version;
 mod cached_mod;
+mod cached_mod_version;
 mod mod_manifest;
 
 pub struct CacheModAccess {
@@ -81,53 +82,75 @@ impl CacheModAccess {
 			Ordering::Greater => ModCacheStatus::OlderVersion,
 		};
 	}
-	
-	pub fn get_cached_mod(&self, version: &Versioning) -> Option<&CachedModVersion>{
+
+	pub fn get_cached_mod<Version: ModVersion>(
+		&self,
+		mod_version: &Version,
+	) -> Option<&CachedModVersion> {
 		self.cached_mods
 			.iter()
-			.find_map(|x| x.get_version(version))
+			.find(|x| x.is_same_name(mod_version))
+			.and_then(|m| m.get_version(mod_version.get_version()))
 	}
 
-	pub async fn cache_mod<Download: ModVersionDownload>(&mut self, downloader: &Download) -> Result<&CachedModVersion> {
-		let mod_path = self.ensure_mod_folder(downloader).await?;
+	pub fn get_cached_mod_from_kind(
+		&self,
+		mod_kind: &ModKind,
+		version: &Versioning,
+	) -> Option<&CachedModVersion> {
+		self.cached_mods
+			.iter()
+			.find(|x| x.get_mod_kind() == mod_kind)
+			.and_then(|m| m.get_version(version))
+	}
 
-		let mod_file_name = to_file_name(downloader);
+	pub async fn cache_mod<Download: ModVersionDownload>(
+		&mut self,
+		downloader: Download,
+		mod_kind: ModKind,
+	) -> Result<&CachedModVersion> {
+		let mod_path = self.ensure_mod_folder(&downloader).await?;
+
+		let mod_file_name = to_file_name(&downloader);
 		let mod_file_path = mod_path.join(Path::new(&mod_file_name));
 		let manifest_path = ModManifest::create_manifest_path(mod_path, &mod_file_name)?;
 
-		let mut writer = BufWriter::new(File::create(&mod_file_path).await?);
+		let mut archive_file = File::create(&mod_file_path).await?;
 		let stream = downloader.download().await?;
-		pin!(stream);
-		while let Some(item) = stream.next().await {
-			let item = item?;
-			writer.write_all(item.as_ref()).await?;
-		}
-		
-		let mut file = File::create(manifest_path).await?;
-		let manifest: ModManifest = downloader.into();
+		archive_file.write_all(stream.as_ref()).await?;
+
+		let mut manifest_file = File::create(manifest_path).await?;
+		let manifest = ModManifest::new(
+			downloader.get_upload_date(),
+			downloader.get_name().to_string(),
+			downloader.get_version().clone(),
+			mod_kind,
+		);
 		let buffer = serde_json::to_vec(&manifest)?;
-		file.write_all(&buffer).await?;
+		manifest_file.write_all(&buffer).await?;
+
 		self.cached_mods = calculate_cache(&self.cache_dir).await?;
 
-		let version = self.cached_mods
+		let version = self
+			.cached_mods
 			.iter()
 			.find_map(|x| x.get_version(downloader.get_version()))
 			.context("Failed to find cached version")?;
 
 		Ok(version)
 	}
-	
-	pub async fn remove_cache(&mut self) -> Result<()>{
-		while let Some(entry) = fs::read_dir(&self.cache_dir).await?.next_entry().await? {
+
+	pub async fn remove_cache(&mut self) -> Result<()> {
+		let mut read = fs::read_dir(&self.cache_dir).await?;
+		while let Some(entry) = read.next_entry().await? {
 			let path = entry.path();
 			if path.is_dir() {
 				fs::remove_dir_all(path).await?;
-			}
-			else if path.is_file() {
+			} else if path.is_file() {
 				fs::remove_file(path).await?
 			}
 		}
-		
+
 		self.cached_mods = calculate_cache(&self.cache_dir).await?;
 		Ok(())
 	}
@@ -144,7 +167,8 @@ impl CacheModAccess {
 
 async fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>> {
 	let mut cached_mods = Vec::new();
-	while let Some(entry) = fs::read_dir(&cache_path).await?.next_entry().await? {
+	let mut read = fs::read_dir(&cache_path).await?;
+	while let Some(entry) = read.next_entry().await? {
 		let path = entry.path();
 		if !path.is_dir() {
 			continue;
@@ -155,16 +179,23 @@ async fn calculate_cache<P: AsRef<Path>>(cache_path: P) -> Result<Vec<CachedMod>
 		if versions.is_empty() {
 			continue;
 		}
-		let name = versions
+		let (name, mod_kind) = versions
 			.first()
-			.map(|cmv| cmv.manifest.get_name().to_string())
+			.map(|cmv| {
+				(
+					cmv.manifest.get_name().to_string(),
+					cmv.manifest.get_mod_kind().clone(),
+				)
+			})
 			.context("Found no mod name")?;
-		cached_mods.push(CachedMod::new(name, versions));
+		cached_mods.push(CachedMod::new(name, versions, mod_kind));
 	}
 	Ok(cached_mods)
 }
 
-async fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Result<Vec<CachedModVersion>> {
+async fn clean_unmanaged_files_and_build_cache(
+	mut vec: Vec<CacheFile>,
+) -> Result<Vec<CachedModVersion>> {
 	let mut to_keep = Vec::new();
 	let mut cached_mods = Vec::new();
 	for cached_file in vec.iter() {
@@ -205,7 +236,8 @@ async fn clean_unmanaged_files_and_build_cache(mut vec: Vec<CacheFile>) -> Resul
 
 async fn get_all_files(folder_path: &PathBuf) -> Result<Vec<CacheFile>> {
 	let mut vec = Vec::new();
-	while let Some(entry) = fs::read_dir(&folder_path).await?.next_entry().await? {
+	let mut read = fs::read_dir(&folder_path).await?;
+	while let Some(entry) = read.next_entry().await? {
 		let string = entry.file_name();
 		let (file_name, file_ext) =
 			separate_file_and_ext(string.to_str().context("Found no filename")?)
@@ -220,7 +252,11 @@ async fn get_all_files(folder_path: &PathBuf) -> Result<Vec<CacheFile>> {
 }
 
 fn to_file_name<Download: ModVersionDownload>(mod_version: &Download) -> String {
-	format!("{}_{}",mod_version.to_file_version(), mod_version.get_file_name())
+	format!(
+		"{}_{}",
+		mod_version.to_file_version(),
+		mod_version.get_file_name()
+	)
 }
 
 fn separate_file_and_ext(file_name: &str) -> PResult<(String, Option<String>)> {
