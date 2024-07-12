@@ -624,9 +624,17 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "096ff9f47b3b1b0126572ab4d11202c4b96002cef810335bce10381e32e6cc8b"
 dependencies = [
+ "async-trait",
  "derive_more",
+ "futures-channel",
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-util",
  "libc",
  "pkg-config",
+ "tokio",
+ "tokio-util",
  "vcpkg",
 ]
 
@@ -4156,6 +4164,7 @@ checksum = "9cf6b47b3771c49ac75ad09a6162f53ad4b8088b76ac60e8ec1455b31a189fe1"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

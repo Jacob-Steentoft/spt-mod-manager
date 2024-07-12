@@ -155,7 +155,7 @@ impl RemoteModAccess {
 		Ok(Some(cached_mod.clone()))
 	}
 
-	pub async fn remove_cache(&mut self) -> Result<()> {
+	pub async fn clear_cache(&mut self) -> Result<()> {
 		self.cache_mod_access.remove_cache().await
 	}
 }

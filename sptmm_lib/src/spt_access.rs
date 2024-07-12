@@ -2,8 +2,6 @@ mod zip_data;
 
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::fs;
-use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -11,6 +9,8 @@ use crate::shared_traits::{ModName, TimeProvider};
 use crate::spt_access::zip_data::ZipData;
 use anyhow::{anyhow, Context, Result};
 use compress_tools::{ArchiveContents, ArchiveIterator, ArchiveIteratorBuilder, Ownership};
+use tokio::fs;
+use std::fs::File;
 use walkdir::WalkDir;
 use winnow::combinator::{empty, opt, separated};
 use winnow::prelude::*;
@@ -45,14 +45,14 @@ pub struct SptAccess<Time: TimeProvider> {
 }
 
 impl<Time: TimeProvider> SptAccess<Time> {
-	pub fn init(paths: &PathAccess, time: Time) -> Result<Self> {
+	pub async fn init(paths: &PathAccess, time: Time) -> Result<Self> {
 		let root_path = paths.spt_root();
 		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() {
 			return Err(anyhow!("Could not find {SERVER_FILE_NAME} in the current folder"));
 		}
 		let install_index = paths.cache_root().join("install_hash");
 		if !install_index.is_dir() {
-			fs::create_dir(&install_index)?;
+			fs::create_dir(&install_index).await?;
 		}
 		Ok(Self {
 			server_mods_path: root_path.join("user/mods/"),
@@ -165,6 +165,16 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		compress_tools::uncompress_archive(reader, install_path.as_ref(), Ownership::Ignore)?;
 		Ok(())
 	}
+	
+	pub async fn clear_cache(&self) -> Result<()>{
+		let mut entries = fs::read_dir(&self.install_index).await?;
+		while let Some(entry) = entries.next_entry().await? {
+			let path = entry.path();
+			fs::remove_file(&path).await?;
+			println!("Deleted: {}", path.display());
+		}
+		Ok(())
+	}
 
 	pub fn backup_to<P: AsRef<Path>>(&self, archive_path: P) -> Result<()> {
 		let current_date = self.time.get_current_time();
@@ -186,37 +196,32 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		Ok(())
 	}
 	
-	pub fn remove_all_mods(&self) -> Result<()>{
-		let entries = fs::read_dir(&self.server_mods_path)?;
-		for entry in entries {
-			let path = entry?.path();
+	pub async fn remove_all_mods(&self) -> Result<()>{
+		let mut entries = fs::read_dir(&self.server_mods_path).await?;
+		while let Some(entry) = entries.next_entry().await? {
+			let path = entry.path();
 			if path.is_file() {
 				continue
 			}
-			fs::remove_dir_all(&path)?;
+			fs::remove_dir_all(&path).await?;
 			println!("Deleted: {}", path.display());
 		}
-		let entries = fs::read_dir(&self.client_mods_path)?;
-		for entry in entries {
-			let path = entry?.path();
+		let mut entries = fs::read_dir(&self.client_mods_path).await?;
+		while let Some(entry) = entries.next_entry().await? {
+			let path = entry.path();
 			if path.file_name() == Some(OsStr::new("spt")) {
 				continue
 			}
 			if path.is_file() {
-				fs::remove_file(&path)?;
+				fs::remove_file(&path).await?;
 				println!("Deleted: {}", path.display());
 				continue
 			}
 			
-			fs::remove_dir_all(&path)?;
+			fs::remove_dir_all(&path).await?;
 			println!("Deleted: {}", path.display());
 		}
-		let entries = fs::read_dir(&self.install_index)?;
-		for entry in entries {
-			let path = entry?.path();
-			fs::remove_file(&path)?;
-			println!("Deleted: {}", path.display());
-		}
+		self.clear_cache().await?;
 		Ok(())
 	}
 
@@ -225,10 +230,10 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		if let Some(dir_path) = dir_parser(path.to_str().context("Failed to parse install path")?)
 			.map_err(|_| anyhow!("Failed to parse install path"))?
 		{
-			fs::create_dir_all(dir_path)?;
+			std::fs::create_dir_all(dir_path)?;
 		}
 
-		let mut writer = BufWriter::new(File::create(path)?);
+		let mut writer = BufWriter::new(std::fs::File::create(path)?);
 		writer.write_all(zip_data.get_data())?;
 		Ok(())
 	}
@@ -250,7 +255,7 @@ fn backup_folder_content(
 		let file_entry = file_entry?;
 		let file_path = file_entry.path();
 		let mut buffer = Vec::new();
-		let mut file = File::open(file_path)?;
+		let mut file = std::fs::File::open(file_path)?;
 		file.read_to_end(&mut buffer)?;
 		zip_writer.start_file_from_path(file_path, options)?;
 		zip_writer.write_all(&buffer)?;
@@ -305,14 +310,14 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn integration_test_restore() {
+	#[tokio::test]
+	async fn integration_test_restore() {
 		let provider = MockTimeProvider::new();
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
 		let path = "./test_output/restore_test";
-		fs::create_dir_all(path).unwrap();
+		fs::create_dir_all(path).await.unwrap();
 		let project = PathAccess::from(path, path).unwrap();
-		SptAccess::init(&project, provider)
+		SptAccess::init(&project, provider).await
 			.unwrap()
 			.restore_from(buf)
 			.unwrap();
@@ -321,40 +326,40 @@ mod tests {
 			"{path}/user/mods/maxloo2-betterkeys-updated/package.json"
 		))
 		.is_file());
-		fs::remove_dir_all(path).unwrap()
+		fs::remove_dir_all(path).await.unwrap()
 	}
 
-	#[test]
-	fn integration_test_install() {
+	#[tokio::test]
+	async fn integration_test_install() {
 		let provider = MockTimeProvider::new();
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
 		let path = "./test_output/install_test";
-		fs::create_dir_all(path).unwrap();
+		fs::create_dir_all(path).await.unwrap();
 		let project = PathAccess::from(path, path).unwrap();
-		SptAccess::init(&project, provider)
+		SptAccess::init(&project, provider).await
 			.unwrap()
 			.install_mod(buf, &TestModName("Test".to_string()), InstallTarget::Client)
 			.unwrap();
-		fs::remove_dir_all(path).unwrap()
+		fs::remove_dir_all(path).await.unwrap()
 	}
 
-	#[test]
-	fn integration_test_backup() {
+	#[tokio::test]
+	async fn integration_test_backup() {
 		let mut provider = MockTimeProvider::new();
 		provider
 			.expect_get_current_time()
 			.returning(DateTime::<Utc>::default);
 		let path = PathBuf::from("./test_output/backup_test");
 		let _discard = fs::remove_dir_all(&path);
-		fs::create_dir_all(&path).unwrap();
+		fs::create_dir_all(&path).await.unwrap();
 		let path1 = "./test_data/backed_up_data";
 		let project = PathAccess::from(path1, path1).unwrap();
 
-		SptAccess::init(&project, provider)
+		SptAccess::init(&project, provider).await
 			.unwrap()
 			.backup_to(&path)
 			.unwrap();
-		fs::remove_dir_all(path).unwrap()
+		fs::remove_dir_all(&path).await.unwrap()
 	}
 
 	#[test]

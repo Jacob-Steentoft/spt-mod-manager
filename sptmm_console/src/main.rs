@@ -51,7 +51,7 @@ async fn main() -> Result<()> {
 	let path_access = PathAccess::new("./").map_err(|e| anyhow!(e))?;
 	let mut remote_access = RemoteModAccess::init(&path_access).await?;
 	let cfg_access = ConfigurationAccess::init(&path_access).await?;
-	let spt_access = SptAccess::init(&path_access, Time::new())?;
+	let spt_access = SptAccess::init(&path_access, Time::new()).await?;
 
 	match args.command {
 		Commands::Update { target } => {
@@ -59,15 +59,17 @@ async fn main() -> Result<()> {
 		}
 		Commands::Backup { backup_to } => backup(&spt_access, &backup_to)?,
 		Commands::Restore { restore_from } => restore(&spt_access, &restore_from)?,
-		Commands::CleanCache => cleanup(&mut remote_access).await?,
-		Commands::RemoveMods => remove_mods(&spt_access)?,
+		Commands::CleanCache => cleanup(&mut remote_access, &spt_access).await?,
+		Commands::RemoveMods => remove_mods(&spt_access).await?,
 	}
 
 	Ok(())
 }
 
-async fn cleanup(cache_access: &mut RemoteModAccess) -> Result<()> {
-	cache_access.remove_cache().await
+async fn cleanup(remote_access: &mut RemoteModAccess, spt_access: &SptAccess<Time>) -> Result<()> {
+	remote_access.clear_cache().await?;
+	spt_access.clear_cache().await?;
+	Ok(())
 }
 
 async fn update(
@@ -172,8 +174,8 @@ async fn update(
 	Ok(())
 }
 
-fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()> {
-	spt_access.remove_all_mods()
+async fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()> {
+	spt_access.remove_all_mods().await
 }
 
 fn restore(spt_access: &SptAccess<Time>, restore_from: &str) -> Result<()> {
