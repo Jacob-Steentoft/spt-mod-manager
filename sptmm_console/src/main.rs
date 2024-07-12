@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
-use sptmm_lib::cache_access::ProjectAccess;
+use sptmm_lib::path_access::PathAccess;
 use sptmm_lib::configuration_access::ConfigurationAccess;
 use sptmm_lib::remote_mod_access::{ModKind, RemoteModAccess};
 use sptmm_lib::shared_traits::ModVersion;
@@ -47,12 +47,11 @@ enum UpdateTarget {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
 	let args = Cli::parse();
-
-	let root_path = "./";
-	let project_access = ProjectAccess::new().map_err(|e| anyhow!(e))?;
-	let mut remote_access = RemoteModAccess::init(&project_access).await?;
-	let cfg_access = ConfigurationAccess::setup(root_path).await?;
-	let spt_access = SptAccess::init(root_path, &project_access, Time::new())?;
+	
+	let path_access = PathAccess::new("./").map_err(|e| anyhow!(e))?;
+	let mut remote_access = RemoteModAccess::init(&path_access).await?;
+	let cfg_access = ConfigurationAccess::init(&path_access).await?;
+	let spt_access = SptAccess::init(&path_access, Time::new())?;
 
 	match args.command {
 		Commands::Update { target } => {

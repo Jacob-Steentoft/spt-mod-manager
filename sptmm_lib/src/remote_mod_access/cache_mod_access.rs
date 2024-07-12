@@ -11,7 +11,7 @@ use winnow::prelude::*;
 use winnow::token::take_until;
 use winnow::PResult;
 
-use crate::cache_access::ProjectAccess;
+use crate::path_access::PathAccess;
 use crate::remote_mod_access::cache_mod_access::cached_mod::CachedMod;
 pub use crate::remote_mod_access::cache_mod_access::cached_mod_version::CachedModVersion;
 use crate::remote_mod_access::cache_mod_access::mod_manifest::ModManifest;
@@ -51,7 +51,7 @@ pub enum ModCacheStatus {
 }
 
 impl CacheModAccess {
-	pub async fn init(project: &ProjectAccess) -> Result<Self> {
+	pub async fn init(project: &PathAccess) -> Result<Self> {
 		let cache_dir = project.cache_root().join("remote");
 		fs::create_dir_all(&cache_dir).await?;
 		let cached_mods = calculate_cache(&cache_dir).await?;

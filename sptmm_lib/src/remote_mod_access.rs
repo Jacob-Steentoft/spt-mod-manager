@@ -7,7 +7,7 @@ use reqwest::{Client, ClientBuilder, Url};
 use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 use versions::Versioning;
-use crate::cache_access::ProjectAccess;
+use crate::path_access::PathAccess;
 use crate::remote_mod_access::github_mod_repository::{GITHUB_DOMAIN, GitHubLink, GithubModRepository};
 use crate::remote_mod_access::mod_version_downloader::ModVersionDownloader;
 use crate::remote_mod_access::spt_mod_repository::{SptModRepository, SptLink, SPT_DOMAIN};
@@ -84,7 +84,7 @@ pub struct RemoteModAccess {
 }
 
 impl RemoteModAccess {
-	pub async fn init(project: &ProjectAccess) -> Result<Self> {
+	pub async fn init(project: &PathAccess) -> Result<Self> {
 		let client = ClientBuilder::new()
 			.user_agent("spt_mod_manager_rs")
 			.build()

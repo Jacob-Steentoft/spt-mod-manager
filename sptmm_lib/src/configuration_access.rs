@@ -1,10 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use versions::Versioning;
+
+use crate::path_access::PathAccess;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct ModConfiguration {
@@ -83,8 +85,8 @@ pub struct ConfigurationAccess {
 }
 
 impl ConfigurationAccess {
-	pub async fn setup<P: AsRef<Path>>(path: P) -> Result<Self> {
-		let root_path = path.as_ref();
+	pub async fn init(path: &PathAccess) -> Result<Self> {
+		let root_path = path.spt_root();
 		if !root_path.is_dir() {
 			return Err(anyhow!("Root folder must be a directory"));
 		}
@@ -135,7 +137,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn integration_test_get_mods_from_path() {
-		let option = ConfigurationAccess::setup("./test_data/")
+		let path_access = PathAccess::from("./test_data/", "./test_data/").unwrap();
+		let option = ConfigurationAccess::init(&path_access)
 			.await
 			.unwrap()
 			.read_remote_mods()

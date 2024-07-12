@@ -18,7 +18,7 @@ use winnow::token::take_until;
 use winnow::{dispatch, PResult};
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
-use crate::cache_access::ProjectAccess;
+use crate::path_access::PathAccess;
 
 const SERVER_FILE_NAME: &str = "Aki.Server.exe";
 
@@ -35,7 +35,7 @@ pub enum InstallTarget {
 	Client,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SptAccess<Time: TimeProvider> {
 	server_mods_path: PathBuf,
 	client_mods_path: PathBuf,
@@ -45,12 +45,12 @@ pub struct SptAccess<Time: TimeProvider> {
 }
 
 impl<Time: TimeProvider> SptAccess<Time> {
-	pub fn init<P: AsRef<Path>>(root_path: P, project: &ProjectAccess, time: Time) -> Result<Self> {
-		let root_path = root_path.as_ref();
+	pub fn init(paths: &PathAccess, time: Time) -> Result<Self> {
+		let root_path = paths.spt_root();
 		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() {
 			return Err(anyhow!("Could not find {SERVER_FILE_NAME} in the current folder"));
 		}
-		let install_index = project.cache_root().join("install_hash");
+		let install_index = paths.cache_root().join("install_hash");
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index)?;
 		}
@@ -311,8 +311,8 @@ mod tests {
 		let buf = PathBuf::from("test_data/backup_2024-06-11T19-06-1718132955Z.zip");
 		let path = "./test_output/restore_test";
 		fs::create_dir_all(path).unwrap();
-		let project = ProjectAccess::from(path).unwrap();
-		SptAccess::init(path, &project, provider)
+		let project = PathAccess::from(path, path).unwrap();
+		SptAccess::init(&project, provider)
 			.unwrap()
 			.restore_from(buf)
 			.unwrap();
@@ -330,8 +330,8 @@ mod tests {
 		let buf = PathBuf::from("test_data/1.2.3_maxloo2-betterkeys-updated-v1.2.3.zip");
 		let path = "./test_output/install_test";
 		fs::create_dir_all(path).unwrap();
-		let project = ProjectAccess::from(path).unwrap();
-		SptAccess::init(path, &project, provider)
+		let project = PathAccess::from(path, path).unwrap();
+		SptAccess::init(&project, provider)
 			.unwrap()
 			.install_mod(buf, &TestModName("Test".to_string()), InstallTarget::Client)
 			.unwrap();
@@ -348,9 +348,9 @@ mod tests {
 		let _discard = fs::remove_dir_all(&path);
 		fs::create_dir_all(&path).unwrap();
 		let path1 = "./test_data/backed_up_data";
-		let project = ProjectAccess::from(path1).unwrap();
+		let project = PathAccess::from(path1, path1).unwrap();
 
-		SptAccess::init(path1, &project, provider)
+		SptAccess::init(&project, provider)
 			.unwrap()
 			.backup_to(&path)
 			.unwrap();

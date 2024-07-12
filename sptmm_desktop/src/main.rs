@@ -86,7 +86,7 @@ enum SaveError {
 }
 impl SavedState {
 	async fn load() -> Result<Self, LoadError> {
-		let cfg_access = ConfigurationAccess::setup("./").await.unwrap();
+		let cfg_access = ConfigurationAccess::init("./").await.unwrap();
 		let cfg = cfg_access.read_remote_mods().await.unwrap();
 		let state = Self { cfg, cfg_access };
 		Ok(state)
