@@ -20,7 +20,8 @@ use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 use crate::path_access::PathAccess;
 
-const SERVER_FILE_NAME: &str = "Aki.Server.exe";
+const OLD_SERVER_FILE_NAME: &str = "Aki.Server.exe";
+const SERVER_FILE_NAME: &str = "SPT.Server.exe";
 
 #[derive(Clone)]
 enum FileType {
@@ -47,10 +48,10 @@ pub struct SptAccess<Time: TimeProvider> {
 impl<Time: TimeProvider> SptAccess<Time> {
 	pub async fn init(paths: &PathAccess, time: Time) -> Result<Self> {
 		let root_path = paths.spt_root();
-		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() {
-			return Err(anyhow!("Could not find {SERVER_FILE_NAME} in the current folder"));
+		if !Path::new(&root_path.join(SERVER_FILE_NAME)).exists() && !Path::new(&root_path.join(OLD_SERVER_FILE_NAME)).exists() {
+			return Err(anyhow!("Could not find {SERVER_FILE_NAME} or {OLD_SERVER_FILE_NAME} in the current folder"));
 		}
-		let install_index = paths.cache_root().join("install_hash");
+		let install_index = root_path.join("install_hash");
 		if !install_index.is_dir() {
 			fs::create_dir(&install_index).await?;
 		}
