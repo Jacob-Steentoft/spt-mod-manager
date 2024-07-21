@@ -4,8 +4,8 @@ use std::time::Duration;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use indicatif::{ProgressBar, ProgressStyle};
-use sptmm_lib::path_access::PathAccess;
 use sptmm_lib::configuration_access::ConfigurationAccess;
+use sptmm_lib::path_access::PathAccess;
 use sptmm_lib::remote_mod_access::{ModKind, RemoteModAccess};
 use sptmm_lib::shared_traits::ModVersion;
 use sptmm_lib::spt_access::{InstallTarget, SptAccess};
@@ -47,7 +47,7 @@ enum UpdateTarget {
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
 	let args = Cli::parse();
-	
+
 	let path_access = PathAccess::new("./").map_err(|e| anyhow!(e))?;
 	let mut remote_access = RemoteModAccess::init(&path_access).await?;
 	let cfg_access = ConfigurationAccess::init(&path_access).await?;
@@ -68,7 +68,7 @@ async fn main() -> Result<()> {
 
 async fn cleanup(remote_access: &mut RemoteModAccess, spt_access: &SptAccess<Time>) -> Result<()> {
 	remote_access.clear_cache().await?;
-	spt_access.clear_cache().await?;
+	spt_access.clear_mm_cache().await?;
 	Ok(())
 }
 
@@ -175,7 +175,11 @@ async fn update(
 }
 
 async fn remove_mods(spt_access: &SptAccess<Time>) -> Result<()> {
-	spt_access.remove_all_mods().await
+	let deleted_files = spt_access.remove_all_mods().await?;
+	for file in deleted_files {
+		println!("Deleted: {}", file.to_string_lossy());
+	}
+	Ok(())
 }
 
 fn restore(spt_access: &SptAccess<Time>, restore_from: &str) -> Result<()> {

@@ -1,7 +1,7 @@
 mod zip_data;
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -22,6 +22,9 @@ use crate::path_access::PathAccess;
 
 const OLD_SERVER_FILE_NAME: &str = "Aki.Server.exe";
 const SERVER_FILE_NAME: &str = "SPT.Server.exe";
+const BEPINEX_CONFIG_PATH: &str = "BepInEx/config";
+const BEPINEX_CACHE_PATH: &str = "BepInEx/cache";
+const USER_CACHE_PATH: &str = "user/cache";
 
 #[derive(Clone)]
 enum FileType {
@@ -167,14 +170,29 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		Ok(())
 	}
 	
-	pub async fn clear_cache(&self) -> Result<()>{
+	pub async fn clear_mm_cache(&self) -> Result<Vec<OsString>>{
+		let mut vec = Vec::new();
 		let mut entries = fs::read_dir(&self.install_index).await?;
 		while let Some(entry) = entries.next_entry().await? {
 			let path = entry.path();
 			fs::remove_file(&path).await?;
-			println!("Deleted: {}", path.display());
+			vec.push(path.into_os_string());
 		}
-		Ok(())
+		Ok(vec)
+	}
+
+	pub async fn clear_spt_cache(&self) -> Result<Vec<OsString>>{
+		let mut vec = Vec::new();
+		let bepinex_path = &self.root_path.join(BEPINEX_CACHE_PATH);
+		vec.append(&mut remove_all_files_in_dir(bepinex_path).await?);
+		let user_path = &self.root_path.join(USER_CACHE_PATH);
+		vec.append(&mut remove_all_files_in_dir(user_path).await?);
+		Ok(vec)
+	}
+
+	pub async fn clear_spt_config(&self) -> Result<Vec<OsString>>{
+		let path = &self.root_path.join(BEPINEX_CONFIG_PATH);
+		remove_all_files_in_dir(path).await
 	}
 
 	pub fn backup_to<P: AsRef<Path>>(&self, archive_path: P) -> Result<()> {
@@ -197,7 +215,8 @@ impl<Time: TimeProvider> SptAccess<Time> {
 		Ok(())
 	}
 	
-	pub async fn remove_all_mods(&self) -> Result<()>{
+	pub async fn remove_all_mods(&self) -> Result<Vec<OsString>>{
+		let mut vec = Vec::new();
 		let mut entries = fs::read_dir(&self.server_mods_path).await?;
 		while let Some(entry) = entries.next_entry().await? {
 			let path = entry.path();
@@ -205,7 +224,7 @@ impl<Time: TimeProvider> SptAccess<Time> {
 				continue
 			}
 			fs::remove_dir_all(&path).await?;
-			println!("Deleted: {}", path.display());
+			vec.push(path.into_os_string());
 		}
 		let mut entries = fs::read_dir(&self.client_mods_path).await?;
 		while let Some(entry) = entries.next_entry().await? {
@@ -215,15 +234,17 @@ impl<Time: TimeProvider> SptAccess<Time> {
 			}
 			if path.is_file() {
 				fs::remove_file(&path).await?;
-				println!("Deleted: {}", path.display());
+				vec.push(path.into_os_string());
 				continue
 			}
 			
 			fs::remove_dir_all(&path).await?;
-			println!("Deleted: {}", path.display());
+			vec.push(path.into_os_string());
 		}
-		self.clear_cache().await?;
-		Ok(())
+		vec.append(&mut self.clear_mm_cache().await?);
+		vec.append(&mut self.clear_spt_cache().await?);
+		vec.append(&mut self.clear_spt_config().await?);
+		Ok(vec)
 	}
 
 	fn write_file_to_tarkov(&self, zip_data: ZipData) -> Result<()> {
@@ -234,10 +255,28 @@ impl<Time: TimeProvider> SptAccess<Time> {
 			std::fs::create_dir_all(dir_path)?;
 		}
 
-		let mut writer = BufWriter::new(std::fs::File::create(path)?);
+		let mut writer = BufWriter::new(File::create(path)?);
 		writer.write_all(zip_data.get_data())?;
 		Ok(())
 	}
+}
+
+async fn remove_all_files_in_dir(path: impl AsRef<Path>) -> Result<Vec<OsString>> {
+	let path = path.as_ref();
+	let mut vec = Vec::new();
+	if !path.is_dir() {
+		return Ok(vec)
+	}
+	let mut entries = fs::read_dir(path).await?;
+	while let Some(entry) = entries.next_entry().await? {
+		let path = entry.path();
+		if !path.is_file() {
+			continue
+		}
+		fs::remove_file(&path).await?;
+		vec.push(path.into_os_string());
+	}
+	Ok(vec)
 }
 
 fn backup_folder_content(
@@ -256,7 +295,7 @@ fn backup_folder_content(
 		let file_entry = file_entry?;
 		let file_path = file_entry.path();
 		let mut buffer = Vec::new();
-		let mut file = std::fs::File::open(file_path)?;
+		let mut file = File::open(file_path)?;
 		file.read_to_end(&mut buffer)?;
 		zip_writer.start_file_from_path(file_path, options)?;
 		zip_writer.write_all(&buffer)?;
