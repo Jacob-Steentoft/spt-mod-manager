@@ -2,9 +2,9 @@ use anyhow::Result;
 use anyhow::{anyhow, Context, Error};
 use octocrab::models::repos::{Asset, Release};
 use octocrab::Octocrab;
+use serde::{Deserialize, Serialize};
 use std::ops::Sub;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 use tokio::time::{sleep_until, Instant};
 use versions::Versioning;
 use winnow::combinator::opt;
@@ -87,6 +87,7 @@ impl GithubModRepository {
 		&mut self,
 		gh_mod: GitHubLink,
 		version: &Versioning,
+		version_filter: Option<&str>,
 	) -> Result<Option<ModDownloadVersion>> {
 		let releases = self
 			.get_client()
@@ -96,13 +97,29 @@ impl GithubModRepository {
 			.list()
 			.send()
 			.await?;
-		let option = releases.into_iter().find(|r| {
-			r.name
-				.as_ref()
-				.is_some_and(|str| str.contains(&version.to_string()))
-		});
-		let Some(release) = option else {
-			return Ok(None);
+		let mut versions: Vec<_> = releases
+			.into_iter()
+			.filter(|r| {
+				r.name.as_ref().is_some_and(|str| {
+					str.contains(&version.to_string())
+						&& version_filter.is_some_and(|s| !str.contains(s))
+				})
+			})
+			.collect();
+
+		let release = match versions.len() {
+			0 => return Ok(None),
+			1 => versions.pop().context("Failed to get version")?,
+			_ => {
+				return Err(anyhow!(
+					"Found too many versions: {}",
+					versions
+						.into_iter()
+						.map(|s| s.name.unwrap_or_default())
+						.collect::<Vec<_>>()
+						.join(", ")
+				))
+			}
 		};
 
 		let asset = Self::filter_asset(&gh_mod, release)?;
@@ -128,8 +145,9 @@ impl GithubModRepository {
 				.find(|ass| ass.name.contains(&gh_mod.asset_pattern) && !ass.name.contains(filter))
 				.with_context(|| {
 					format!(
-						"Failed to find assert from pattern: {}, and filter: {:?}",
-						&gh_mod.asset_pattern, &gh_mod.asset_filter
+						"Failed to find assert from pattern: {}, and filter: {}",
+						&gh_mod.asset_pattern,
+						&gh_mod.asset_filter.clone().unwrap_or("".to_string())
 					)
 				});
 		};

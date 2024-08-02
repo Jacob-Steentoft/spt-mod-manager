@@ -114,7 +114,7 @@ async fn update(
 				bar.set_message(format!("Finding version '{version}' for: {mod_url}"));
 
 				let option = match remote_mod_access
-					.get_specific_version(mod_kind, &version)
+					.get_specific_version(mod_kind, &version, mod_cfg.version_filter.as_deref())
 					.await
 				{
 					Ok(mod_version) => mod_version,

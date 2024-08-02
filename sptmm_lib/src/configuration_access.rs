@@ -18,6 +18,7 @@ pub struct ModConfiguration {
 pub struct ModVersionConfiguration {
 	pub url: String,
 	pub version: Option<Versioning>,
+	pub version_filter: Option<String>,
 	pub github_pattern: Option<String>,
 	pub install_path: Option<String>,
 	pub github_filter: Option<String>,
@@ -33,9 +34,10 @@ struct ModConfigurationRaw {
 struct ModVersionConfigurationRaw {
 	url: String,
 	version: Option<String>,
-	github_pattern: Option<String>,
+	version_filter: Option<String>,
+	github_assert_pattern: Option<String>,
 	install_path: Option<String>,
-	github_filter: Option<String>,
+	github_assert_filter: Option<String>,
 }
 
 impl TryFrom<ModVersionConfigurationRaw> for ModVersionConfiguration {
@@ -50,9 +52,10 @@ impl TryFrom<ModVersionConfigurationRaw> for ModVersionConfiguration {
 
 		Ok(Self {
 			url: value.url,
+			version_filter: value.version_filter,
 			install_path: value.install_path,
-			github_pattern: value.github_pattern,
-			github_filter: value.github_filter,
+			github_pattern: value.github_assert_pattern,
+			github_filter: value.github_assert_filter,
 			version,
 		})
 	}
@@ -62,9 +65,10 @@ impl From<ModVersionConfiguration> for ModVersionConfigurationRaw {
 	fn from(value: ModVersionConfiguration) -> Self {
 		Self {
 			url: value.url,
+			version_filter: value.version_filter,
 			install_path: value.install_path,
-			github_pattern: value.github_pattern,
-			github_filter: value.github_filter,
+			github_assert_pattern: value.github_pattern,
+			github_assert_filter: value.github_filter,
 			version: value.version.map(|t| t.to_string()),
 		}
 	}
@@ -151,6 +155,7 @@ mod tests {
 				version: None,
 				github_pattern: None,
 				install_path: None,
+				version_filter: None,
 				github_filter: None,
 			}],
 			spt_version: Versioning::Ideal("3.8.3".parse().unwrap()),

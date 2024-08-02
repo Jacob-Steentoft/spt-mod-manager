@@ -97,12 +97,3 @@ impl SavedState {
 		Ok(())
 	}
 }
-
-fn loading_message<'a>() -> Element<'a, Message> {
-	center(
-		text("Loading...")
-			.horizontal_alignment(alignment::Horizontal::Center)
-			.size(50),
-	)
-		.into()
-}

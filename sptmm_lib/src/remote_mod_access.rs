@@ -123,6 +123,7 @@ impl RemoteModAccess {
 		&mut self,
 		mod_kind: ModKind,
 		version: &Versioning,
+		version_filter: Option<&str>,
 	) -> Result<Option<CachedModVersion>> {
 		// TODO: Handle rate limits
 		if let Some(cached_mod) = self.cache_mod_access.get_cached_mod_from_kind(&mod_kind, version) {
@@ -130,7 +131,7 @@ impl RemoteModAccess {
 		};
 		
 		let mod_version = match mod_kind.clone() {
-			ModKind::GitHub(gh_mod) => self.github.get_version(gh_mod, version).await?,
+			ModKind::GitHub(gh_mod) => self.github.get_version(gh_mod, version, version_filter).await?,
 			ModKind::SpTarkov(spt_mod) => self.spt_client.get_version(spt_mod, version).await?,
 		};
 
