@@ -1,5 +1,9 @@
-use iced::{alignment, Command, Element, window};
-use iced::widget::{text};
+mod mod_configuration;
+
+use iced::alignment::Horizontal::Center;
+use iced::widget::{container, keyed_column, progress_bar, text};
+use iced::Length::Fill;
+use iced::{alignment, window, Command, Element};
 use sptmm_lib::configuration_access::{
 	ConfigurationAccess, ModConfiguration, ModVersionConfiguration,
 };
@@ -20,7 +24,7 @@ enum RemoteMods {
 #[derive(Debug)]
 struct State {
 	remote_client: SptAccess<Time>,
-	tasks: Vec<ModVersionConfiguration>,
+	remote_mods: Vec<ModVersionConfiguration>,
 	dirty: bool,
 	saving: bool,
 }
@@ -39,29 +43,34 @@ impl RemoteMods {
 	fn load() -> Command<Message> {
 		Command::perform(SavedState::load(), Message::Loaded)
 	}
-	
-	fn update(&self, message: Message) -> Command<Message>{
+
+	fn update(&self, message: Message) -> Command<Message> {
 		match self {
-			RemoteMods::Loading => {
-				match message{
-					Message::Loaded(state) => {}
-					Message::Saved(_) => {}
-					Message::InputChanged(_) => {}
-					Message::CreateCfgVersion => {}
-					Message::TabPressed { .. } => {}
-					Message::ToggleFullscreen(_) => {}
-				}
-			}
-			RemoteMods::Loaded(state) => {
-				
-			}
+			RemoteMods::Loading => match message {
+				Message::Loaded(state) => {}
+				Message::Saved(_) => {}
+				Message::InputChanged(_) => {}
+				Message::CreateCfgVersion => {}
+				Message::TabPressed { .. } => {}
+				Message::ToggleFullscreen(_) => {}
+			},
+			RemoteMods::Loaded(state) => {}
 		}
 	}
-	
-	fn view(&self) -> Element<Message>{
+
+	fn view(&self) -> Element<Message> {
 		match self {
-			RemoteMods::Loading => {}
-			RemoteMods::Loaded(_) => {}
+			RemoteMods::Loading => container(
+				text("Loading...")
+					.width(Fill)
+					.horizontal_alignment(Center)
+					.size(50),
+			)
+			.center_y()
+			.into(),
+			RemoteMods::Loaded(State { remote_mods, .. }) => {
+				keyed_column(remote_mods.iter().map())
+			}
 		}
 	}
 }

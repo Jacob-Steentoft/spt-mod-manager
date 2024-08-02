@@ -97,15 +97,26 @@ impl GithubModRepository {
 			.list()
 			.send()
 			.await?;
-		let mut versions: Vec<_> = releases
-			.into_iter()
-			.filter(|r| {
-				r.name.as_ref().is_some_and(|str| {
-					str.contains(&version.to_string())
-						&& version_filter.is_some_and(|s| !str.contains(s))
+
+		let mut versions: Vec<_> = if let Some(version_filter) = version_filter {
+			releases
+				.into_iter()
+				.filter(|r| {
+					r.name.as_ref().is_some_and(|str| {
+						str.contains(&version.to_string()) && !str.contains(version_filter)
+					})
 				})
-			})
-			.collect();
+				.collect()
+		} else {
+			releases
+				.into_iter()
+				.filter(|r| {
+					r.name
+						.as_ref()
+						.is_some_and(|str| str.contains(&version.to_string()))
+				})
+				.collect()
+		};
 
 		let release = match versions.len() {
 			0 => return Ok(None),
