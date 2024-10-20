@@ -4,8 +4,8 @@ version = "0.7.1"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = "1.0.90"
 sptmm_lib = {path = "../sptmm_lib"}
-clap = { version = "4.5.7", features = ["derive"] }
-tokio = { version =  "1.38.0", features = ["rt", "macros", "rt-multi-thread"] }
+clap = { version = "4.5.20", features = ["derive"] }
+tokio = { version =  "1.40.0", features = ["rt", "macros", "rt-multi-thread"] }
 indicatif = "0.17.8"
