@@ -1,6 +1,6 @@
 use iced::alignment::Horizontal::Center;
-use iced::widget::{button, row, text, text_input, Text};
-use iced::{Element, Font};
+use iced::widget::{button, horizontal_space, row, text, text_input, Text};
+use iced::{Background, Element, Font};
 use sptmm_lib::configuration_access::ModVersionConfiguration;
 
 // https://github.com/iced-rs/iced/tree/master/examples/todos
@@ -29,7 +29,7 @@ enum ConfigurationState {
 }
 
 #[derive(Debug, Clone)]
-enum ConfigurationMessage {
+pub(crate) enum ConfigurationMessage {
 	UrlChanged(String),
 	VersionChanged(String),
 	VersionFilterChanged(String),
@@ -42,19 +42,22 @@ enum ConfigurationMessage {
 }
 
 impl ModConfigEntryView {
+	pub fn new(mod_entry: &ModVersionConfiguration) -> Self {
+		mod_entry.clone().into()
+	}
+
 	pub fn view(&self) -> Element<ConfigurationMessage> {
 		match self.state {
 			ConfigurationState::Idle => {
 				let current = &self.current;
 				row!(
-					text(&current.url),
-					text(&current.version),
-					text(&current.version_filter),
-					text(&current.github_pattern),
-					button(edit_icon())
-						.on_press(ConfigurationMessage::Edit)
-						.padding(10)
-						.width(90)
+					text_input("", &current.url),
+					text_input("", &current.version),
+					text_input("", &current.version_filter),
+					text_input("", &current.github_filter),
+					text_input("", &current.github_pattern),
+					horizontal_space(),
+					button(text("Edit").center()).on_press(ConfigurationMessage::Edit)
 				)
 				.into()
 			}
@@ -68,20 +71,14 @@ impl ModConfigEntryView {
 						.on_input(ConfigurationMessage::VersionChanged),
 					text_input(&current.version_filter, &modified.version_filter)
 						.on_input(ConfigurationMessage::VersionFilterChanged),
+					text_input(&current.github_filter, &modified.github_filter)
+						.on_input(ConfigurationMessage::GithubFilterChanged),
 					text_input(&current.github_pattern, &modified.github_pattern)
 						.on_input(ConfigurationMessage::GithubPatternChanged),
-					button("Save")
-						.on_press(ConfigurationMessage::Save)
-						.padding(10)
-						.width(30),
-					button("Cancel")
-						.on_press(ConfigurationMessage::Cancel)
-						.padding(10)
-						.width(30),
-					button("Delete")
-						.on_press(ConfigurationMessage::Delete)
-						.padding(10)
-						.width(30),
+					horizontal_space(),
+					button("Save").on_press(ConfigurationMessage::Save),
+					button("Cancel").on_press(ConfigurationMessage::Cancel),
+					button("Delete").on_press(ConfigurationMessage::Delete),
 				)
 				.into()
 			}
@@ -122,32 +119,15 @@ impl ModConfigEntryView {
 	}
 }
 
-fn text_icon(unicode: char) -> Text<'static> {
-	text(unicode.to_string())
-		.font(ICONS)
-		.width(20)
-		.align_x(Center)
-}
-
-const ICONS: Font = Font::with_name("Iced-Todos-Icons");
-
-fn edit_icon() -> Text<'static> {
-	text_icon('\u{F303}')
-}
-
 impl From<ModVersionConfiguration> for ModConfigEntryView {
 	fn from(value: ModVersionConfiguration) -> Self {
 		Self {
 			current: ModConfigEntry {
 				url: value.url,
 				version: value.version.map_or(String::new(), |x| x.to_string()),
-				version_filter: value
-					.version_filter
-					.map_or(String::new(), |x| x.to_string()),
-				github_pattern: value
-					.github_pattern
-					.map_or(String::new(), |x| x.to_string()),
-				github_filter: value.github_filter.map_or(String::new(), |x| x.to_string()),
+				version_filter: value.version_filter.unwrap_or_default(),
+				github_pattern: value.github_pattern.unwrap_or_default(),
+				github_filter: value.github_filter.unwrap_or_default(),
 			},
 			modified: Default::default(),
 			state: Default::default(),

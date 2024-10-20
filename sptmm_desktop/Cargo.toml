@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 sptmm_lib = {path = "../sptmm_lib"}
-iced = {version = "0.13.1", features = ["default"]}
+iced = {version = "0.13.1", features = ["default", "tokio"]}
 serde_json = "1.0.132"
 serde = "1.0.210"
 tokio = "1.40.0"

@@ -1,46 +1,59 @@
+use crate::mod_configurations::{ModConfigurationsMessage, ModConfigurationsView};
 use iced::{Element, Task};
 
+mod mod_configurations;
 mod mod_entry;
-mod mods;
 
 fn main() -> iced::Result {
-	iced::application(ModManager::title, ModManager::update, ModManager::view).run_with(ModManager::new)
+	iced::application(
+		ModManagerView::title,
+		ModManagerView::update,
+		ModManagerView::view,
+	)
+	.run()
 }
 
-enum ModManager {
-	Loading,
-	Loaded(State)
-}
-
-struct State {
-	
-}
-
-enum Menu{
-	ModConfiguration,
+#[derive(Default, Debug)]
+struct ModManagerView {
+	menu: Menu,
 }
 
 #[derive(Debug)]
-enum Message {
-	
+enum Menu {
+	ModConfiguration(ModConfigurationsView),
 }
 
-impl ModManager {
-	fn title(&self) -> String{
+impl Default for Menu {
+	fn default() -> Self {
+		Self::ModConfiguration(ModConfigurationsView::default())
+	}
+}
+
+#[derive(Debug)]
+enum ModManagerMessage {
+	ModConfigurationMessage(ModConfigurationsMessage),
+}
+
+impl ModManagerView {
+	fn title(&self) -> String {
 		"Mod Manager".to_string()
 	}
-	fn update(&mut self, message: Message) -> Task<Message>{
-
+	fn update(&mut self, message: ModManagerMessage) -> Task<ModManagerMessage> {
+		match (&mut self.menu, message) {
+			(
+				Menu::ModConfiguration(ref mut view),
+				ModManagerMessage::ModConfigurationMessage(message),
+			) => view
+				.update(message)
+				.map(ModManagerMessage::ModConfigurationMessage),
+		}
 	}
 
-	fn view(&self) -> Element<Message>{
-
-	}
-
-	fn new() -> (Self, Task<Message>){
-		(Self::Loading,
-		 Task::perform(SavedState::load(), Message::Loaded),
-		)
+	fn view(&self) -> Element<ModManagerMessage> {
+		match &self.menu {
+			Menu::ModConfiguration(mod_cfg) => mod_cfg
+				.view()
+				.map(ModManagerMessage::ModConfigurationMessage),
+		}
 	}
 }
-
